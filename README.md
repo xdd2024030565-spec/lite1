@@ -5,7 +5,7 @@
 ## 访问地址
 
 - 🚀 **国内加速地址（推荐）**: https://nav.yongjiu.ccwu.cc/
-- 📦 GitHub Pages 原始地址: https://xdd2024030565-spec.github.io/1/
+- 📦 GitHub Pages 原始地址: https://xdd2024030565-spec.github.io/lite1/
 
 ## 加速方案
 
