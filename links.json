@@ -28,6 +28,15 @@
   ],
   "links": [
     {
+      "id": "mughz01pbyq9o",
+      "url": "https://discord.com/channels/@me",
+      "title": "https://discord.com/channels/@me",
+      "categoryId": "default",
+      "note": "",
+      "pinned": false,
+      "added": "2026-09-25T05:05:25.501Z"
+    },
+    {
       "id": "mughltcadvsfk",
       "url": "https://mcjs.link/",
       "title": "mcjs：网页版mc",
