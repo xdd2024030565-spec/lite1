@@ -348,7 +348,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
             <button id="engineBackBtn" disabled>← 后退</button>
             <input type="text" class="se-url-display" id="engineUrlInput" placeholder="粘贴网址或输入关键词，回车打开" autocomplete="off" spellcheck="false" value="">
             <button id="engineOpenBtn">↗ 新标签</button>
-            <button id="engineReadBtn">📖 阅读模式</button>
+            <button id="engineReadBtn">🔁 自动</button>
             <button id="engineFsBtn">⛶ 全屏</button>
           </div>
           <div class="se-frame-wrap" id="engineFrameWrap"><div class="se-empty">选择搜索结果预览网页</div></div>
@@ -1034,6 +1034,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   }
   function browseSite(url){
     if(!url) return;
+    engineTempRead=false;
     engineHistory=engineHistory.slice(0,engineHistIdx+1);
     engineHistory.push(url); engineHistIdx=engineHistory.length-1;
     document.querySelectorAll(".se-item").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-url")===url);});
@@ -1049,7 +1050,8 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       return;
     }
     var url=engineHistory[engineHistIdx];
-    var mode=enginePreviewMode||"proxy";
+    var mode=(enginePreviewMode==="read"||engineTempRead)?"read":"proxy";
+    var isAuto=(enginePreviewMode==="auto");
     var browseUrl=SEARCH_API+(mode==="read"?"/read?url=":"/browse?url=")+encodeURIComponent(url);
     wrap.innerHTML='<div class="se-loading">加载中'+(mode==="read"?"（阅读模式）":"")+'...</div>';
     var frame=document.createElement("iframe");
@@ -1057,11 +1059,11 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     frame.sandbox="allow-scripts allow-same-origin allow-forms";
     frame.style.opacity="0"; frame.style.transition="opacity .3s";
     var done=false;
-    var fbTimer=setTimeout(function(){ if(done) return; if(mode==="proxy"){ enginePreviewMode="read"; showToast("原站禁止内嵌，已自动切换阅读模式",null,null); updateEngineFrame(); } },9000);
+    var fbTimer=setTimeout(function(){ if(done) return; if(mode==="read") return; if(isAuto){ engineTempRead=true; showToast("原站内嵌超时，已临时转阅读（下一次点结果自动回网页）",null,null); updateEngineFrame(); } else { var ld2=wrap.querySelector(".se-loading"); if(ld2){ ld2.className="se-empty"; ld2.textContent="原站加载超时：当前是「始终网页」模式，可点按钮切到「📖 始终阅读」"; } } },9000);
     frame.onload=function(){done=true; clearTimeout(fbTimer); var ld=wrap.querySelector(".se-loading"); if(ld) ld.style.display="none"; frame.style.opacity="1";};
     wrap.appendChild(frame);
     setUrlBox(url+(mode==="read"?"（阅读模式）":""));
-    var rb=$("engineReadBtn"); if(rb) rb.textContent=(mode==="read"?"🌐 网页模式":"📖 阅读模式");
+    engineApplyModeLabel();
     $("engineBackBtn").disabled=(engineHistIdx<=0);
   }
   function engineExitFullscreen(){
@@ -1081,8 +1083,13 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(!on){ /* 退出时保证列表可见 */ var r=document.querySelector(".se-results"); if(r) r.style.pointerEvents=""; }
   }
   function engineBack(){if(engineHistIdx>0){engineHistIdx--;updateEngineFrame();}}
-  var enginePreviewMode="proxy";
-  function engineToggleMode(){ enginePreviewMode=(enginePreviewMode==="read"?"proxy":"read"); showToast(enginePreviewMode==="read"?"已切换到阅读模式":"已切换到网页模式",null,null); if(engineHistIdx>=0) updateEngineFrame(); }
+  var enginePreviewMode=(function(){ try{ var v=safeLS("getItem","engine_preview_mode"); return (v==="proxy"||v==="read"||v==="auto")?v:"auto"; }catch(e){ return "auto"; } })();
+  var engineTempRead=false;
+  var ENGINE_MODE_SEQ=["auto","proxy","read"];
+  var ENGINE_MODE_LABEL={auto:"🔁 自动",proxy:"🌐 始终网页",read:"📖 始终阅读"};
+  var ENGINE_MODE_TIP={auto:"自动模式：优先网页内嵌，超时才转阅读",proxy:"始终网页：只走内嵌预览，不会自动转阅读",read:"始终阅读：只用阅读模式"};
+  function engineApplyModeLabel(){ var rb=$("engineReadBtn"); if(rb) rb.textContent=ENGINE_MODE_LABEL[enginePreviewMode]||"🔁 自动"; }
+  function engineToggleMode(){ var i=ENGINE_MODE_SEQ.indexOf(enginePreviewMode); if(i<0) i=0; enginePreviewMode=ENGINE_MODE_SEQ[(i+1)%ENGINE_MODE_SEQ.length]; try{ safeLS("setItem","engine_preview_mode",enginePreviewMode); }catch(e){} engineTempRead=(enginePreviewMode==="read"); showToast(ENGINE_MODE_TIP[enginePreviewMode]||"",null,null); engineApplyModeLabel(); if(engineHistIdx>=0) updateEngineFrame(); }
   function engineOpen(){if(engineHistIdx>=0&&engineHistory[engineHistIdx]) window.open(engineHistory[engineHistIdx],"_blank");}
 
   // ====== 后门函数 ======
@@ -2482,6 +2489,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   $("engineBackBtn").onclick=engineBack;
   $("engineOpenBtn").onclick=engineOpen;
   $("engineReadBtn").onclick=engineToggleMode;
+  engineApplyModeLabel();
   $("engineFsBtn").onclick=engineToggleFullscreen;
   document.addEventListener("keydown",function(e){ if(e.key==="Escape"){ var p=document.querySelector(".se-preview"); if(p&&p.classList.contains("se-fs")) engineExitFullscreen(); } });
   var eui=$("engineUrlInput");
