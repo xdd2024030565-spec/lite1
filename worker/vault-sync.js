@@ -1,16 +1,16 @@
-// Cloudflare Worker · 密码库密文同步后端（KV 版）
-// 只做一件事：把请求体里的字符串原样存进 KV，或把 KV 里的字符串原样返回。
-// 服务端不解析、不解密、不合并任何条目内容。
-//
+// Cloudflare Worker · 通用密文/JSON 同步后端（KV 版）v2
 // 路由：
-//   OPTIONS /vault   -> CORS 预检
-//   GET     /vault   -> 返回已存储的密文信封 JSON（不存在返回 404）
-//   PUT     /vault   -> 覆盖写入密文信封 JSON（body > 256KB 返回 413）
-//
+//   OPTIONS /vault | /memo  -> CORS 预检
+//   GET     /vault          -> 返回密码库密文信封 JSON（不存在 404）
+//   PUT     /vault          -> 覆盖写入密码库密文信封（≤256KB）
+//   GET     /memo           -> 返回备忘录 JSON 信封（不存在 404）
+//   PUT     /memo           -> 覆盖写入备忘录 JSON 信封（≤256KB）
+// 语义：服务端不解析业务内容，只做「原样存取 + JSON 合法性校验」。
 // 鉴权：Authorization: Bearer <env.SYNC_KEY>，不匹配 401。
 // CORS：Access-Control-Allow-Origin 取自 env.ALLOW_ORIGIN。
-//
-// KV 结构：单个 key = "vault"，value = 前端上传的密文信封字符串。
+// KV：key "vault" 与 key "memo"（复用同一 namespace）。
+
+const KEY_BY_PATH = { "/vault": "vault", "/memo": "memo" };
 
 export default {
   async fetch(request, env) {
@@ -28,8 +28,11 @@ export default {
     }
 
     const url = new URL(request.url);
-    const path = url.pathname;
-    if (path !== "/vault" && path !== "/vault/") {
+    let path = url.pathname;
+    if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+
+    const kvKey = KEY_BY_PATH[path];
+    if (!kvKey) {
       return jsonResp({ error: "Not Found" }, 404, corsHeaders);
     }
 
@@ -40,7 +43,7 @@ export default {
     }
 
     if (request.method === "GET") {
-      const value = await env.VAULT_KV.get("vault");
+      const value = await env.VAULT_KV.get(kvKey);
       if (value === null) {
         return jsonResp({ error: "Not Found" }, 404, corsHeaders);
       }
@@ -62,8 +65,8 @@ export default {
       try { JSON.parse(text); } catch (e) {
         return jsonResp({ error: "Invalid JSON" }, 400, corsHeaders);
       }
-      await env.VAULT_KV.put("vault", text);
-      return jsonResp({ ok: true }, 200, corsHeaders);
+      await env.VAULT_KV.put(kvKey, text);
+      return jsonResp({ ok: true, key: kvKey }, 200, corsHeaders);
     }
 
     return jsonResp({ error: "Method Not Allowed" }, 405, corsHeaders);
