@@ -163,6 +163,8 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .se-toolbar button:hover{border-color:var(--accent);color:var(--accent)}
 .se-toolbar button:disabled{opacity:.4;cursor:default}
 .se-url-display{flex:1;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg2);font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.se-toolbar input.se-url-display{color:var(--fg);font-size:.82rem;font-family:inherit;min-width:0;outline:none}
+.se-toolbar input.se-url-display:focus{border-color:var(--accent)}
 .se-frame-wrap{flex:1;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#fff;position:relative;min-height:300px}
 .se-frame-wrap iframe{width:100%;height:100%;border:none}
 .se-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--fg2);font-size:.9rem;position:absolute;inset:0}
@@ -337,7 +339,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
         <div class="se-preview">
           <div class="se-toolbar">
             <button id="engineBackBtn" disabled>← 后退</button>
-            <span class="se-url-display" id="engineUrlDisplay">未加载</span>
+            <input type="text" class="se-url-display" id="engineUrlInput" placeholder="粘贴网址或输入关键词，回车打开" autocomplete="off" spellcheck="false" value="">
             <button id="engineOpenBtn">↗ 新标签</button>
             <button id="engineReadBtn">📖 阅读模式</button>
           </div>
@@ -1028,11 +1030,12 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     document.querySelectorAll(".se-item").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-url")===url);});
     updateEngineFrame();
   }
+  function setUrlBox(v){ var i=$("engineUrlInput"); if(i){ i.value=v; } var s=$("engineUrlDisplay"); if(s){ s.textContent=v; } }
   function updateEngineFrame(){
     var wrap=$("engineFrameWrap");
     if(engineHistIdx<0||!engineHistory[engineHistIdx]){
       wrap.innerHTML='<div class="se-empty">选择搜索结果预览网页</div>';
-      $("engineUrlDisplay").textContent="未加载";
+      setUrlBox("未加载");
       $("engineBackBtn").disabled=true;
       return;
     }
@@ -1042,13 +1045,13 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     wrap.innerHTML='<div class="se-loading">加载中'+(mode==="read"?"（阅读模式）":"")+'...</div>';
     var frame=document.createElement("iframe");
     frame.src=browseUrl;
-    frame.sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
+    frame.sandbox="allow-scripts allow-same-origin allow-forms";
     frame.style.opacity="0"; frame.style.transition="opacity .3s";
     var done=false;
     var fbTimer=setTimeout(function(){ if(done) return; if(mode==="proxy"){ enginePreviewMode="read"; showToast("原站禁止内嵌，已自动切换阅读模式",null,null); updateEngineFrame(); } },9000);
     frame.onload=function(){done=true; clearTimeout(fbTimer); var ld=wrap.querySelector(".se-loading"); if(ld) ld.style.display="none"; frame.style.opacity="1";};
     wrap.appendChild(frame);
-    $("engineUrlDisplay").textContent=url+(mode==="read"?"（阅读模式）":"");
+    setUrlBox(url+(mode==="read"?"（阅读模式）":""));
     var rb=$("engineReadBtn"); if(rb) rb.textContent=(mode==="read"?"🌐 网页模式":"📖 阅读模式");
     $("engineBackBtn").disabled=(engineHistIdx<=0);
   }
@@ -2454,6 +2457,32 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   $("engineBackBtn").onclick=engineBack;
   $("engineOpenBtn").onclick=engineOpen;
   $("engineReadBtn").onclick=engineToggleMode;
+  var eui=$("engineUrlInput");
+  if(eui){
+    eui.onkeypress=function(e){
+      if(e.key!=="Enter") return;
+      var v=this.value.trim(); if(!v) return;
+      var isUrl=/^(https?:)/i.test(v)||/^[^ ]+[.][^ ]+$/.test(v);
+      if(isUrl){ browseSite(/^(https?:)/i.test(v)?v:"https://"+v); }
+      else { $("engineInput").value=v; doEngineSearch(); }
+    };
+  }
+  window.addEventListener("message",function(ev){
+    if(!ev||!ev.origin||ev.origin!==SEARCH_API) return;
+    var d=null;
+    if(typeof ev.data==="string"){ try{ d=JSON.parse(ev.data); }catch(e){ return; } } else { d=ev.data; }
+    if(!d||d.t!=="nav"||!d.url) return;
+    var nu=String(d.url);
+    if(nu.indexOf("http")!==0) return;
+    if(engineHistory[engineHistIdx]!==nu){
+      engineHistory=engineHistory.slice(0,engineHistIdx+1);
+      engineHistory.push(nu); engineHistIdx=engineHistory.length-1;
+    }
+    setUrlBox(nu+(enginePreviewMode==="read"?"（阅读模式）":""));
+    var bb=$("engineBackBtn"); if(bb) bb.disabled=(engineHistIdx<=0);
+    var items=document.querySelectorAll(".se-item");
+    for(var i=0;i<items.length;i++){ items[i].classList.toggle("active", items[i].getAttribute("data-url")===nu); }
+  });
 
   // 后门入口：连击标题5次
   var titleEl = $("siteTitle");
