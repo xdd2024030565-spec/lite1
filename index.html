@@ -174,6 +174,58 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .font-btn:hover{border-color:var(--accent);color:var(--accent)}
 .font-range{width:100px;cursor:pointer;accent-color:var(--accent)}
 .font-value{font-size:.85rem;color:var(--fg2);min-width:30px;text-align:center}
+/* ========== 密码库 ========== */
+.vault-lock{max-width:420px;margin:40px auto;padding:32px 24px;background:var(--card);border-radius:var(--radius);text-align:center}
+.vault-lock-icon{font-size:3rem;margin-bottom:12px}
+.vault-lock-title{font-size:1.3rem;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+.vault-lock-desc{font-size:.85rem;color:var(--fg2);margin-bottom:20px;line-height:1.6}
+.vault-lock .vault-input{width:100%;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--fg);font-size:1rem;font-family:inherit;margin-bottom:10px}
+.vault-lock .vault-input:focus{outline:none;border-color:var(--accent)}
+.vault-lock .vault-btn{width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;font-family:inherit}
+.vault-lock .vault-btn:disabled{opacity:.5;cursor:default}
+.vault-lock .vault-err{font-size:.85rem;color:var(--danger);min-height:20px;margin-top:8px;text-align:left;word-break:break-word}
+.vault-lock .vault-link{background:transparent;border:none;color:var(--fg2);font-size:.82rem;cursor:pointer;font-family:inherit;margin-top:14px}
+.vault-lock .vault-link:hover{color:var(--danger)}
+.vault-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.vault-search{flex:1;min-width:160px;padding:12px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--fg);font-size:.95rem;font-family:inherit}
+.vault-search:focus{outline:none;border-color:var(--accent)}
+.vault-add-btn{padding:12px 20px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;cursor:pointer;font-family:inherit}
+.vault-lock-btn{padding:12px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg);font-size:.9rem;cursor:pointer;font-family:inherit;transition:all .2s}
+.vault-lock-btn:hover{border-color:var(--accent);color:var(--accent)}
+.vault-tabs{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;margin-bottom:12px;scrollbar-width:none}
+.vault-tabs::-webkit-scrollbar{display:none}
+.vault-entry{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.vault-entry-row{display:flex;align-items:flex-start;gap:12px}
+.vault-entry-icon{width:36px;height:36px;border-radius:8px;flex-shrink:0;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:600}
+.vault-entry-info{flex:1;min-width:0}
+.vault-entry-title{font-size:1rem;font-weight:600;word-break:break-word;margin-bottom:2px}
+.vault-entry-meta{font-size:.8rem;color:var(--fg2);word-break:break-all;line-height:1.5}
+.vault-entry-actions{display:flex;gap:2px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.vault-entry-actions button{border:none;background:transparent;color:var(--fg2);font-size:.78rem;padding:5px 8px;border-radius:6px;cursor:pointer;font-family:inherit;transition:all .15s}
+.vault-entry-actions button:hover{color:var(--accent);background:var(--accent-bg)}
+.vault-entry-actions button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
+.vault-pwd-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.vault-pwd{flex:1;min-width:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:all}
+.vault-pwd.hidden{-webkit-text-security:disc;text-security:disc}
+.vault-pwd-row button{border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:.75rem;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.vault-pwd-row button:hover{border-color:var(--accent);color:var(--accent)}
+.vault-strength{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:8px}
+.vault-strength-bar{height:100%;width:0;transition:width .3s,background .3s;background:var(--border)}
+.vault-strength-txt{font-size:.72rem;color:var(--fg2);margin-top:3px}
+.vault-form{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.vault-form h3{font-size:1rem;margin-bottom:12px;font-weight:700;letter-spacing:-.01em}
+.vault-form label{display:block;font-size:.78rem;color:var(--fg2);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.vault-form input,.vault-form textarea,.vault-form select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--fg);font-size:.92rem;margin-bottom:10px;font-family:inherit}
+.vault-form input:focus,.vault-form textarea:focus,.vault-form select:focus{outline:none;border-color:var(--accent)}
+.vault-form textarea{resize:vertical;min-height:60px}
+.vault-form-actions{display:flex;gap:8px;margin-top:4px}
+.vault-gen{background:var(--bg2);border-radius:10px;padding:12px;margin-bottom:12px;display:none}
+.vault-gen.show{display:block}
+.vault-gen-row{display:flex;gap:10px;align-items:center;font-size:.85rem;margin-bottom:8px;flex-wrap:wrap}
+.vault-gen-row label{display:flex;align-items:center;gap:6px;margin:0;color:var(--fg);cursor:pointer;text-transform:none;font-weight:400;letter-spacing:0;font-size:.85rem}
+.vault-gen-row input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);margin:0}
+.vault-gen-btn{width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit}
+.vault-empty{text-align:center;color:var(--fg2);padding:40px 20px;font-size:.9rem}
 </style>
 </head>
 <body>
@@ -327,6 +379,11 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     <div id="pwdMsg" class="status-msg" style="display:none;"></div>
   </div>
 
+  <div class="panel" id="panel-vault">
+    <div class="page-header"><h1>密码库</h1></div>
+    <div id="vaultView"></div>
+  </div>
+
 </div><!-- /main-content -->
 
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastBtn">撤销</button></div>
@@ -356,6 +413,9 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       {id:"search-engine",label:"搜索引擎",icon:"🌐",type:"group",defaultExpanded:false,children:[
         {id:"panel-engine",label:"全网搜索",icon:"🔎",type:"page"}
       ]},
+      {id:"vault-group",label:"密码库",icon:"🔐",type:"group",defaultExpanded:false,children:[
+        {id:"panel-vault",label:"密码库",icon:"🔐",type:"page",adminOnly:true}
+      ]},
       {id:"reader-link",label:"阅读器",icon:"📚",type:"link",url:"reader.html"},
     ]},
     {id:"settings-section",label:"设置",icon:"⚙️",type:"section",defaultExpanded:false,children:[
@@ -369,7 +429,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   var OWNER="xdd2024030565-spec",REPO="lite1",BRANCH="main",FILE_PATH="links.json";
   var API_BASE="https://api.yongjiu.ccwu.cc";
   var AUTH_API="https://auth-api.yongjiu.ccwu.cc";
-  var ADMIN_PANELS=["panel-categories","panel-settings","panel-password"];
+  var ADMIN_PANELS=["panel-categories","panel-settings","panel-password","panel-vault"];
   var S={siteName:"网址储存",settings:{theme:"auto",fontSize:16},categories:[{id:"default",name:"常用"}],links:[],curCat:"all",searchQ:"",fileSha:null,busy:false,undoCb:null,saveRetrying:false,activePanel:"panel-links",authMode:"loading",authToken:null};
   var engineHistory=[],engineHistIdx=-1;
 
@@ -714,6 +774,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     safeLS('setItem','active_panel',id);
     var mc=$("mainContent");
     if(id==="panel-engine") mc.classList.add("wide"); else mc.classList.remove("wide");
+    if(id==="panel-vault") vaultRender();
     if(window.innerWidth<=768) closeSidebar();
   }
 
@@ -977,6 +1038,493 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     return result;
   }
 
+  // ====== 密码库 ======
+  var VAULT_META_KEY="vault_meta",VAULT_CIPHER_KEY="vault_cipher",VAULT_ITER=600000;
+  var VAULT_CATS=["默认","工作","社交","金融","开发","其他"];
+  var V={key:null,items:null,unlocked:false,editingId:null,lockTimer:null,clipTimer:null,filter:"all",query:""};
+  var vaultLastBump=0;
+
+  function vEl(tag,props,kids){
+    var e=document.createElement(tag);
+    if(props) for(var k in props){
+      var v=props[k];
+      if(v===null||v===undefined||v===false) continue;
+      if(k==="class") e.className=v;
+      else if(k==="text") e.textContent=v;
+      else if(k==="value"&&(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")) e.value=v;
+      else if(k==="checked"&&tag==="INPUT") e.checked=!!v;
+      else if(k==="selected"&&tag==="OPTION") e.selected=!!v;
+      else if(k==="style"){
+        if(typeof v==="string") e.style.cssText=v;
+        else if(typeof v==="object"){for(var s in v) e.style[s]=v[s];}
+      }
+      else if(k.indexOf("on")===0&&typeof v==="function") e.addEventListener(k.slice(2).toLowerCase(),v);
+      else if(k==="dataset"&&typeof v==="object"){for(var d in v) e.dataset[d]=v[d];}
+      else e.setAttribute(k,v);
+    }
+    if(kids){
+      if(!Array.isArray(kids)) kids=[kids];
+      kids.forEach(function(c){
+        if(c===null||c===undefined||c===false) return;
+        e.appendChild(typeof c==="string"?document.createTextNode(c):c);
+      });
+    }
+    return e;
+  }
+  function vaultHasMeta(){return !!safeLS('getItem',VAULT_META_KEY);}
+  function vaultCryptoOk(){return !!(window.crypto&&window.crypto.subtle);}
+  function b64FromBuf(buf){
+    var bytes=new Uint8Array(buf),s="";
+    for(var i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function bufFromB64(b64){
+    var bin=atob(b64),bytes=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return bytes;
+  }
+  function vaultRandomBytes(n){var a=new Uint8Array(n);crypto.getRandomValues(a);return a;}
+  function vaultDeriveKey(pwd,saltB64,iter){
+    if(!vaultCryptoOk()) return Promise.reject(new Error("当前环境不支持 Web Crypto，需通过 HTTPS 访问"));
+    var enc=new TextEncoder();
+    return crypto.subtle.importKey("raw",enc.encode(pwd),{name:"PBKDF2"},false,["deriveKey"])
+      .then(function(base){
+        return crypto.subtle.deriveKey(
+          {name:"PBKDF2",salt:bufFromB64(saltB64),iterations:iter||VAULT_ITER,hash:"SHA-256"},
+          base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+      });
+  }
+  function vaultAesEncrypt(key,plain){
+    var iv=vaultRandomBytes(12);
+    return crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,new TextEncoder().encode(plain))
+      .then(function(ct){return {iv:b64FromBuf(iv),ct:b64FromBuf(ct)};});
+  }
+  function vaultAesDecrypt(key,ivB64,ctB64){
+    return crypto.subtle.decrypt({name:"AES-GCM",iv:bufFromB64(ivB64)},key,bufFromB64(ctB64))
+      .then(function(pt){return new TextDecoder().decode(pt);});
+  }
+  function vaultCreate(pwd){
+    var salt=b64FromBuf(vaultRandomBytes(16));
+    return vaultDeriveKey(pwd,salt,VAULT_ITER).then(function(key){
+      return vaultAesEncrypt(key,"VAULT_VERIFY_V1").then(function(ver){
+        safeLS('setItem',VAULT_META_KEY,JSON.stringify({salt:salt,iter:VAULT_ITER,ver:ver}));
+        V.key=key;V.items=[];V.unlocked=true;
+        return vaultSave().then(function(){vaultStartAutoLock();vaultRender();});
+      });
+    });
+  }
+  function vaultUnlock(pwd){
+    if(!vaultCryptoOk()) return Promise.reject(new Error("当前环境不支持 Web Crypto，需通过 HTTPS 访问"));
+    var meta;
+    try{meta=JSON.parse(safeLS('getItem',VAULT_META_KEY)||"null");}catch(e){meta=null;}
+    if(!meta) return Promise.reject(new Error("密码库未初始化"));
+    return vaultDeriveKey(pwd,meta.salt,meta.iter).then(function(key){
+      return vaultAesDecrypt(key,meta.ver.iv,meta.ver.ct).then(function(txt){
+        if(txt!=="VAULT_VERIFY_V1") throw new Error("主密码错误");
+        V.key=key;
+        var raw=safeLS('getItem',VAULT_CIPHER_KEY);
+        if(!raw){V.items=[];V.unlocked=true;vaultStartAutoLock();vaultRender();return;}
+        var env;
+        try{env=JSON.parse(raw);}catch(e){throw new Error("密文损坏");}
+        return vaultAesDecrypt(key,env.iv,env.ct).then(function(json){
+          try{V.items=JSON.parse(json);}catch(e){V.items=[];}
+          if(!Array.isArray(V.items)) V.items=[];
+          V.unlocked=true;vaultStartAutoLock();vaultRender();
+        });
+      }).catch(function(e){
+        if(e&&e.name==="OperationError") throw new Error("主密码错误");
+        throw e;
+      });
+    });
+  }
+  function vaultSave(){
+    if(!V.unlocked||!V.key) return Promise.resolve();
+    var json=JSON.stringify(V.items||[]);
+    return vaultAesEncrypt(V.key,json).then(function(env){
+      safeLS('setItem',VAULT_CIPHER_KEY,JSON.stringify(env));
+    });
+  }
+  function vaultLock(){
+    V.key=null;V.items=null;V.unlocked=false;V.editingId=null;
+    if(V.lockTimer){clearTimeout(V.lockTimer);V.lockTimer=null;}
+    if(V.clipTimer){clearTimeout(V.clipTimer);V.clipTimer=null;}
+    vaultRender();
+  }
+  function vaultStartAutoLock(){
+    if(V.lockTimer) clearTimeout(V.lockTimer);
+    V.lockTimer=setTimeout(function(){
+      if(V.unlocked){
+        vaultLock();
+        showToast("密码库已自动上锁",null,null);
+      }
+    },5*60*1000);
+  }
+  function vaultActivityBump(){
+    if(!V.unlocked) return;
+    var now=Date.now();
+    if(now-vaultLastBump<5000) return;
+    vaultLastBump=now;
+    vaultStartAutoLock();
+  }
+  function vaultInit(){
+    ["mousemove","keydown","click","scroll","touchstart"].forEach(function(ev){
+      document.addEventListener(ev,vaultActivityBump,{passive:true});
+    });
+  }
+  function vaultCopy(text,label){
+    if(!text) return;
+    var done=function(){
+      showToast("已复制"+label,null,null);
+      if(V.clipTimer) clearTimeout(V.clipTimer);
+      V.clipTimer=setTimeout(function(){
+        try{
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            navigator.clipboard.writeText("").then(function(){showToast("剪贴板已清空",null,null);}).catch(function(){});
+          }
+        }catch(e){}
+      },30000);
+    };
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(function(){
+        var ta=document.createElement("textarea");
+        ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+        document.body.appendChild(ta);ta.select();
+        try{document.execCommand("copy");done();}catch(e){}
+        document.body.removeChild(ta);
+      });
+    }else{
+      var ta=document.createElement("textarea");
+      ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+      document.body.appendChild(ta);ta.select();
+      try{document.execCommand("copy");done();}catch(e){}
+      document.body.removeChild(ta);
+    }
+  }
+  function vaultGenPwd(len,upper,lower,digit,symbol){
+    var chars="";
+    if(upper) chars+="ABCDEFGHJKLMNPQRSTUVWXYZ";
+    if(lower) chars+="abcdefghijkmnpqrstuvwxyz";
+    if(digit) chars+="23456789";
+    if(symbol) chars+="!@#$%^&*()-_=+[]{};:,.?";
+    if(!chars) chars="abcdefghijkmnpqrstuvwxyz0123456789";
+    var arr=new Uint32Array(len);
+    crypto.getRandomValues(arr);
+    var out="";
+    for(var i=0;i<len;i++) out+=chars[arr[i]%chars.length];
+    return out;
+  }
+  function vaultStrength(pwd){
+    if(!pwd) return {score:0,label:"—",pct:0,varColor:"var(--border)"};
+    var s=0;
+    if(pwd.length>=8) s++;
+    if(pwd.length>=12) s++;
+    if(pwd.length>=16) s++;
+    if(/[a-z]/.test(pwd)&&/[A-Z]/.test(pwd)) s++;
+    if(/[0-9]/.test(pwd)) s++;
+    if(/[^A-Za-z0-9]/.test(pwd)) s++;
+    if(s<=2) return {score:1,label:"弱",pct:33,varColor:"var(--danger)"};
+    if(s<=4) return {score:2,label:"中",pct:66,varColor:"var(--accent)"};
+    return {score:3,label:"强",pct:100,varColor:"var(--accent)"};
+  }
+  function vaultRender(){
+    var root=$("vaultView");if(!root) return;
+    root.textContent="";
+    if(!vaultHasMeta()) root.appendChild(vaultBuildSetup());
+    else if(!V.unlocked) root.appendChild(vaultBuildUnlock());
+    else{
+      root.appendChild(vaultBuildMain());
+      vaultRenderTabs();
+      vaultRenderList();
+      vaultRenderForm();
+    }
+  }
+  function vaultBuildSetup(){
+    var wrap=vEl("div",{class:"vault-lock"});
+    wrap.appendChild(vEl("div",{class:"vault-lock-icon",text:"🔐"}));
+    wrap.appendChild(vEl("div",{class:"vault-lock-title",text:"创建密码库"}));
+    wrap.appendChild(vEl("div",{class:"vault-lock-desc",text:"设置主密码。密码库使用 PBKDF2（600000 次迭代）+ AES-256-GCM 加密，主密码与派生密钥不会离开你的浏览器。"}));
+    if(!vaultCryptoOk()){
+      wrap.appendChild(vEl("div",{class:"vault-err",text:"⚠ 当前环境不支持 Web Crypto API（通常是未启用 HTTPS）。请通过 HTTPS 或 localhost 访问。"}));
+    }
+    var p1=vEl("input",{class:"vault-input",type:"password",placeholder:"主密码（至少 8 位）"});
+    var p2=vEl("input",{class:"vault-input",type:"password",placeholder:"确认主密码"});
+    var btn=vEl("button",{class:"vault-btn",text:"创建密码库"});
+    var err=vEl("div",{class:"vault-err"});
+    wrap.appendChild(p1);wrap.appendChild(p2);wrap.appendChild(btn);wrap.appendChild(err);
+    btn.addEventListener("click",function(){
+      var a=p1.value,b=p2.value;
+      if(a.length<8){err.textContent="主密码至少 8 位";return;}
+      if(a!==b){err.textContent="两次输入不一致";return;}
+      btn.disabled=true;btn.textContent="创建中...";err.textContent="";
+      vaultCreate(a).catch(function(e){
+        btn.disabled=false;btn.textContent="创建密码库";
+        err.textContent=e.message||"创建失败";
+      });
+    });
+    return wrap;
+  }
+  function vaultBuildUnlock(){
+    var wrap=vEl("div",{class:"vault-lock"});
+    wrap.appendChild(vEl("div",{class:"vault-lock-icon",text:"🔒"}));
+    wrap.appendChild(vEl("div",{class:"vault-lock-title",text:"密码库已上锁"}));
+    wrap.appendChild(vEl("div",{class:"vault-lock-desc",text:"输入主密码以解锁。"}));
+    if(!vaultCryptoOk()){
+      wrap.appendChild(vEl("div",{class:"vault-err",text:"⚠ 当前环境不支持 Web Crypto API。"}));
+    }
+    var p1=vEl("input",{class:"vault-input",type:"password",placeholder:"主密码"});
+    var btn=vEl("button",{class:"vault-btn",text:"解锁"});
+    var err=vEl("div",{class:"vault-err"});
+    wrap.appendChild(p1);wrap.appendChild(btn);wrap.appendChild(err);
+    function doUnlock(){
+      var p=p1.value;if(!p) return;
+      btn.disabled=true;btn.textContent="解锁中...";err.textContent="";
+      vaultUnlock(p).catch(function(e){
+        btn.disabled=false;btn.textContent="解锁";
+        err.textContent=e.message||"解锁失败";
+        p1.value="";
+      });
+    }
+    btn.addEventListener("click",doUnlock);
+    p1.addEventListener("keypress",function(e){if(e.key==="Enter")doUnlock();});
+    var reset=vEl("button",{class:"vault-link",text:"忘记主密码？重置密码库（数据将永久丢失）"});
+    reset.addEventListener("click",function(){
+      if(!confirm("重置将永久删除所有密码条目，无法恢复。确认继续？")) return;
+      safeLS('removeItem',VAULT_META_KEY);
+      safeLS('removeItem',VAULT_CIPHER_KEY);
+      V.key=null;V.items=null;V.unlocked=false;
+      vaultRender();
+      showToast("密码库已重置",null,null);
+    });
+    wrap.appendChild(reset);
+    return wrap;
+  }
+  function vaultBuildMain(){
+    var wrap=vEl("div");
+    var search=vEl("input",{class:"vault-search",type:"text",placeholder:"搜索标题 / 用户名 / 网址 / 备注...",value:V.query});
+    search.addEventListener("input",function(){V.query=this.value;vaultRenderList();});
+    var addBtn=vEl("button",{class:"vault-add-btn",text:"+ 新建"});
+    addBtn.addEventListener("click",function(){V.editingId="new";vaultRenderForm();});
+    var lockBtn=vEl("button",{class:"vault-lock-btn",text:"🔒 上锁"});
+    lockBtn.addEventListener("click",function(){vaultLock();showToast("密码库已上锁",null,null);});
+    wrap.appendChild(vEl("div",{class:"vault-toolbar"},[search,addBtn,lockBtn]));
+    wrap.appendChild(vEl("div",{id:"vaultFormWrap"}));
+    wrap.appendChild(vEl("div",{class:"vault-tabs",id:"vaultTabs"}));
+    wrap.appendChild(vEl("div",{id:"vaultList"}));
+    return wrap;
+  }
+  function vaultRenderTabs(){
+    var wrap=$("vaultTabs");if(!wrap) return;
+    wrap.textContent="";
+    var cats=["all"].concat(VAULT_CATS);
+    cats.forEach(function(c){
+      var label=c==="all"?"全部":c;
+      var cnt=c==="all"?V.items.length:V.items.filter(function(it){return (it.cat||"默认")===c;}).length;
+      var btn=vEl("button",{class:"cat-tab"+(V.filter===c?" active":""),text:label+"("+cnt+")"});
+      btn.addEventListener("click",function(){V.filter=c;vaultRenderTabs();vaultRenderList();});
+      wrap.appendChild(btn);
+    });
+  }
+  function vaultRenderList(){
+    var wrap=$("vaultList");if(!wrap) return;
+    wrap.textContent="";
+    var items=(V.items||[]).slice();
+    if(V.filter!=="all") items=items.filter(function(it){return (it.cat||"默认")===V.filter;});
+    if(V.query){
+      var q=V.query.toLowerCase();
+      items=items.filter(function(it){
+        return (it.title||"").toLowerCase().indexOf(q)!==-1
+          || (it.user||"").toLowerCase().indexOf(q)!==-1
+          || (it.url||"").toLowerCase().indexOf(q)!==-1
+          || (it.note||"").toLowerCase().indexOf(q)!==-1;
+      });
+    }
+    items.sort(function(a,b){return (b.updated||0)-(a.updated||0);});
+    if(items.length===0){
+      wrap.appendChild(vEl("div",{class:"vault-empty",text:(V.query||V.filter!=="all")?"没有匹配的条目":"还没有条目，点击「+ 新建」添加"}));
+      return;
+    }
+    items.forEach(function(it){wrap.appendChild(vaultBuildEntry(it));});
+  }
+  function vaultBuildEntry(it){
+    var card=vEl("div",{class:"vault-entry"});
+    var row=vEl("div",{class:"vault-entry-row"});
+    row.appendChild(vEl("div",{class:"vault-entry-icon",text:(it.title||"?").charAt(0).toUpperCase()}));
+    var info=vEl("div",{class:"vault-entry-info"});
+    info.appendChild(vEl("div",{class:"vault-entry-title",text:it.title||"(无标题)"}));
+    var parts=[];
+    if(it.user) parts.push(it.user);
+    if(it.url){try{parts.push(new URL(it.url).hostname);}catch(e){parts.push(it.url);}}
+    if(it.cat) parts.push(it.cat);
+    if(parts.length) info.appendChild(vEl("div",{class:"vault-entry-meta",text:parts.join(" · ")}));
+    row.appendChild(info);
+    var acts=vEl("div",{class:"vault-entry-actions"});
+    var ed=vEl("button",{text:"编辑"});
+    ed.addEventListener("click",function(){V.editingId=it.id;vaultRenderForm();});
+    acts.appendChild(ed);
+    var dl=vEl("button",{class:"danger",text:"删除"});
+    dl.addEventListener("click",function(){vaultDelete(it.id);});
+    acts.appendChild(dl);
+    row.appendChild(acts);
+    card.appendChild(row);
+    var pwdRow=vEl("div",{class:"vault-pwd-row"});
+    var pwdEl=vEl("div",{class:"vault-pwd hidden",text:it.pwd||""});
+    pwdRow.appendChild(pwdEl);
+    var eye=vEl("button",{text:"👁 显示"});
+    eye.addEventListener("click",function(){
+      if(pwdEl.classList.contains("hidden")){pwdEl.classList.remove("hidden");eye.textContent="🙈 隐藏";}
+      else{pwdEl.classList.add("hidden");eye.textContent="👁 显示";}
+    });
+    pwdRow.appendChild(eye);
+    var cp=vEl("button",{text:"📋 复制密码"});
+    cp.addEventListener("click",function(){vaultCopy(it.pwd,"密码");});
+    pwdRow.appendChild(cp);
+    if(it.user){
+      var cu=vEl("button",{text:"📋 复制用户名"});
+      cu.addEventListener("click",function(){vaultCopy(it.user,"用户名");});
+      pwdRow.appendChild(cu);
+    }
+    card.appendChild(pwdRow);
+    var st=vaultStrength(it.pwd||"");
+    var barWrap=vEl("div",{class:"vault-strength"});
+    barWrap.appendChild(vEl("div",{class:"vault-strength-bar",style:{width:st.pct+"%",background:st.varColor}}));
+    card.appendChild(barWrap);
+    card.appendChild(vEl("div",{class:"vault-strength-txt",text:"强度："+st.label}));
+    if(it.note) card.appendChild(vEl("div",{class:"vault-entry-meta",style:{marginTop:"8px"},text:"备注："+it.note}));
+    return card;
+  }
+  function vaultRenderForm(){
+    var wrap=$("vaultFormWrap");if(!wrap) return;
+    wrap.textContent="";
+    if(V.editingId===null) return;
+    wrap.appendChild(vaultBuildForm());
+    var inp=$("vTitle");if(inp) inp.focus();
+  }
+  function vaultBuildForm(){
+    var it=V.editingId==="new"?{title:"",user:"",pwd:"",url:"",note:"",cat:VAULT_CATS[0]}
+      :(V.items||[]).find(function(x){return x.id===V.editingId;});
+    if(!it) return vEl("div");
+    var form=vEl("div",{class:"vault-form"});
+    form.appendChild(vEl("h3",{text:V.editingId==="new"?"新建条目":"编辑条目"}));
+    form.appendChild(vEl("label",{text:"标题"}));
+    form.appendChild(vEl("input",{type:"text",id:"vTitle",value:it.title||"",autocomplete:"off"}));
+    form.appendChild(vEl("label",{text:"用户名"}));
+    form.appendChild(vEl("input",{type:"text",id:"vUser",value:it.user||"",autocomplete:"off"}));
+    form.appendChild(vEl("label",{text:"密码"}));
+    var pwdRow=vEl("div",{style:{display:"flex",gap:"8px",marginBottom:"10px"}});
+    var pwdInp=vEl("input",{type:"password",id:"vPwd",value:it.pwd||"",autocomplete:"new-password",style:{flex:"1",marginBottom:"0"}});
+    pwdRow.appendChild(pwdInp);
+    var genBtn=vEl("button",{class:"vault-lock-btn",text:"🎲 生成",style:{padding:"10px 14px"}});
+    pwdRow.appendChild(genBtn);
+    form.appendChild(pwdRow);
+    var genPanel=vEl("div",{class:"vault-gen",id:"vGenPanel"});
+    var lenRow=vEl("div",{class:"vault-gen-row"});
+    var lenLbl=vEl("label",{text:"长度："});
+    var lenVal=vEl("span",{text:"16"});
+    lenLbl.appendChild(lenVal);
+    var lenRange=vEl("input",{type:"range",min:"6",max:"64",value:"16"});
+    lenRange.addEventListener("input",function(){lenVal.textContent=this.value;});
+    lenRow.appendChild(lenLbl);lenRow.appendChild(lenRange);
+    genPanel.appendChild(lenRow);
+    var optRow=vEl("div",{class:"vault-gen-row"});
+    [{id:"vGenUpper",label:"大写",checked:true},{id:"vGenLower",label:"小写",checked:true},{id:"vGenDigit",label:"数字",checked:true},{id:"vGenSym",label:"符号",checked:false}].forEach(function(o){
+      var lbl=vEl("label");
+      var cb=vEl("input",{type:"checkbox",id:o.id,checked:o.checked});
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode(o.label));
+      optRow.appendChild(lbl);
+    });
+    genPanel.appendChild(optRow);
+    var genDo=vEl("button",{class:"vault-gen-btn",text:"生成密码"});
+    genDo.addEventListener("click",function(){
+      var len=parseInt(lenRange.value)||16;
+      var pwd=vaultGenPwd(len,$("vGenUpper").checked,$("vGenLower").checked,$("vGenDigit").checked,$("vGenSym").checked);
+      pwdInp.value=pwd;
+      updateStrength();
+    });
+    genPanel.appendChild(genDo);
+    form.appendChild(genPanel);
+    genBtn.addEventListener("click",function(){genPanel.classList.toggle("show");});
+    var stWrap=vEl("div",{class:"vault-strength"});
+    var stBar=vEl("div",{class:"vault-strength-bar"});
+    stWrap.appendChild(stBar);
+    form.appendChild(stWrap);
+    var stTxt=vEl("div",{class:"vault-strength-txt"});
+    form.appendChild(stTxt);
+    function updateStrength(){
+      var st=vaultStrength(pwdInp.value);
+      stBar.style.width=st.pct+"%";
+      stBar.style.background=st.varColor;
+      stTxt.textContent="强度："+st.label;
+    }
+    updateStrength();
+    pwdInp.addEventListener("input",updateStrength);
+    var toggleLbl=vEl("label",{style:{display:"flex",alignItems:"center",gap:"6px",fontSize:".82rem",marginBottom:"10px",cursor:"pointer",textTransform:"none",letterSpacing:"0",fontWeight:"400"}});
+    var toggleCb=vEl("input",{type:"checkbox"});
+    toggleLbl.appendChild(toggleCb);
+    toggleLbl.appendChild(document.createTextNode("显示密码"));
+    toggleCb.addEventListener("change",function(){pwdInp.type=this.checked?"text":"password";});
+    form.appendChild(toggleLbl);
+    form.appendChild(vEl("label",{text:"网址"}));
+    form.appendChild(vEl("input",{type:"text",id:"vUrl",value:it.url||"",autocomplete:"off"}));
+    form.appendChild(vEl("label",{text:"分类"}));
+    var sel=vEl("select",{id:"vCat"});
+    VAULT_CATS.forEach(function(c){
+      sel.appendChild(vEl("option",{value:c,text:c,selected:it.cat===c}));
+    });
+    form.appendChild(sel);
+    form.appendChild(vEl("label",{text:"备注"}));
+    var ta=vEl("textarea",{id:"vNote"});
+    ta.value=it.note||"";
+    form.appendChild(ta);
+    var actions=vEl("div",{class:"vault-form-actions"});
+    var save=vEl("button",{class:"btn-save",text:"保存"});
+    save.addEventListener("click",vaultSaveEntry);
+    var cancel=vEl("button",{class:"btn-cancel",text:"取消"});
+    cancel.addEventListener("click",function(){V.editingId=null;vaultRenderForm();});
+    actions.appendChild(save);actions.appendChild(cancel);
+    form.appendChild(actions);
+    return form;
+  }
+  function vaultSaveEntry(){
+    var title=$("vTitle").value.trim();
+    if(!title){alert("请输入标题");return;}
+    var data={
+      title:title,
+      user:$("vUser").value.trim(),
+      pwd:$("vPwd").value,
+      url:$("vUrl").value.trim(),
+      note:$("vNote").value.trim(),
+      cat:$("vCat").value||VAULT_CATS[0],
+      updated:Date.now()
+    };
+    if(V.editingId==="new"){
+      data.id=Date.now().toString(36)+Math.random().toString(36).substr(2,5);
+      data.created=Date.now();
+      V.items.push(data);
+    }else{
+      var idx=V.items.findIndex(function(x){return x.id===V.editingId;});
+      if(idx<0){return;}
+      data.id=V.items[idx].id;
+      data.created=V.items[idx].created||Date.now();
+      V.items[idx]=data;
+    }
+    V.editingId=null;
+    vaultSave().then(function(){
+      vaultRenderTabs();vaultRenderList();vaultRenderForm();
+      showToast("已保存",null,null);
+    });
+  }
+  function vaultDelete(id){
+    var idx=V.items.findIndex(function(x){return x.id===id;});
+    if(idx<0) return;
+    if(!confirm("确认删除此条目？")) return;
+    V.items.splice(idx,1);
+    vaultSave().then(function(){
+      vaultRenderTabs();vaultRenderList();
+      showToast("已删除",null,null);
+    });
+  }
+
   // ====== 事件绑定 ======
   $("guestCard").onclick=handleGuestLogin;
   $("adminCard").onclick=showLoginForm;
@@ -1060,6 +1608,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   // ====== 初始化 ======
   var sp=safeLS('getItem','active_panel'); if(sp) S.activePanel=sp;
   applyThemeStyle();applyFontSize();
+  vaultInit();
   checkAuthStatus();
 })();
 </script>
