@@ -339,6 +339,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
             <button id="engineBackBtn" disabled>← 后退</button>
             <span class="se-url-display" id="engineUrlDisplay">未加载</span>
             <button id="engineOpenBtn">↗ 新标签</button>
+            <button id="engineReadBtn">📖 阅读模式</button>
           </div>
           <div class="se-frame-wrap" id="engineFrameWrap"><div class="se-empty">选择搜索结果预览网页</div></div>
         </div>
@@ -465,6 +466,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   var OWNER="xdd2024030565-spec",REPO="lite1",BRANCH="main",FILE_PATH="links.json";
   var API_BASE="https://api.yongjiu.ccwu.cc";
   var AUTH_API="https://auth-api.yongjiu.ccwu.cc";
+  var SEARCH_API="https://search.yongjiu.ccwu.cc";
   var ADMIN_PANELS=["panel-categories","panel-settings","panel-password","panel-vault","panel-memo"];
   var S={siteName:"网址储存",settings:{theme:"auto",fontSize:16},categories:[{id:"default",name:"常用"}],links:[],curCat:"all",searchQ:"",fileSha:null,busy:false,undoCb:null,saveRetrying:false,activePanel:"panel-links",authMode:"loading",authToken:null};
   var engineHistory=[],engineHistIdx=-1;
@@ -996,7 +998,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var q=$("engineInput").value.trim(); if(!q) return;
     var btn=$("engineBtn"); btn.textContent="搜索中..."; btn.disabled=true;
     $("engineResults").innerHTML='<div class="se-empty">搜索中...</div>';
-    fetch(AUTH_API+"/search?q="+encodeURIComponent(q))
+    fetch(SEARCH_API+"/search?q="+encodeURIComponent(q))
       .then(function(r){return r.json();})
       .then(function(d){
         btn.textContent="🔍 搜索"; btn.disabled=false;
@@ -1035,18 +1037,24 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       return;
     }
     var url=engineHistory[engineHistIdx];
-    var browseUrl=AUTH_API+"/browse?url="+encodeURIComponent(url);
-    wrap.innerHTML='<div class="se-loading">加载中...</div>';
+    var mode=enginePreviewMode||"proxy";
+    var browseUrl=SEARCH_API+(mode==="read"?"/read?url=":"/browse?url=")+encodeURIComponent(url);
+    wrap.innerHTML='<div class="se-loading">加载中'+(mode==="read"?"（阅读模式）":"")+'...</div>';
     var frame=document.createElement("iframe");
     frame.src=browseUrl;
     frame.sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
     frame.style.opacity="0"; frame.style.transition="opacity .3s";
-    frame.onload=function(){var ld=wrap.querySelector(".se-loading"); if(ld) ld.style.display="none"; frame.style.opacity="1";};
+    var done=false;
+    var fbTimer=setTimeout(function(){ if(done) return; if(mode==="proxy"){ enginePreviewMode="read"; showToast("原站禁止内嵌，已自动切换阅读模式",null,null); updateEngineFrame(); } },9000);
+    frame.onload=function(){done=true; clearTimeout(fbTimer); var ld=wrap.querySelector(".se-loading"); if(ld) ld.style.display="none"; frame.style.opacity="1";};
     wrap.appendChild(frame);
-    $("engineUrlDisplay").textContent=url;
+    $("engineUrlDisplay").textContent=url+(mode==="read"?"（阅读模式）":"");
+    var rb=$("engineReadBtn"); if(rb) rb.textContent=(mode==="read"?"🌐 网页模式":"📖 阅读模式");
     $("engineBackBtn").disabled=(engineHistIdx<=0);
   }
   function engineBack(){if(engineHistIdx>0){engineHistIdx--;updateEngineFrame();}}
+  var enginePreviewMode="proxy";
+  function engineToggleMode(){ enginePreviewMode=(enginePreviewMode==="read"?"proxy":"read"); showToast(enginePreviewMode==="read"?"已切换到阅读模式":"已切换到网页模式",null,null); if(engineHistIdx>=0) updateEngineFrame(); }
   function engineOpen(){if(engineHistIdx>=0&&engineHistory[engineHistIdx]) window.open(engineHistory[engineHistIdx],"_blank");}
 
   // ====== 后门函数 ======
@@ -2445,6 +2453,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   $("engineInput").onkeypress=function(e){if(e.key==="Enter")doEngineSearch();};
   $("engineBackBtn").onclick=engineBack;
   $("engineOpenBtn").onclick=engineOpen;
+  $("engineReadBtn").onclick=engineToggleMode;
 
   // 后门入口：连击标题5次
   var titleEl = $("siteTitle");
