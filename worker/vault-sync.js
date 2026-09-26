@@ -1,14 +1,14 @@
-// Cloudflare Worker · 通用密文/JSON 同步后端（KV 版）v2
+// Cloudflare Worker · 通用 JSON 同步后端（KV 版）v3
 // 路由：
-//   OPTIONS /vault | /memo  -> CORS 预检
-//   GET     /vault          -> 返回密码库密文信封 JSON（不存在 404）
-//   PUT     /vault          -> 覆盖写入密码库密文信封（≤256KB）
-//   GET     /memo           -> 返回备忘录 JSON 信封（不存在 404）
-//   PUT     /memo           -> 覆盖写入备忘录 JSON 信封（≤256KB）
+//   OPTIONS /vault | /memo | /memo/<token>   -> CORS 预检
+//   GET/PUT /vault        -> 密码库密文信封（Bearer SYNC_KEY 必需）
+//   GET/PUT /memo         -> 备忘录（Bearer SYNC_KEY，向后兼容）
+//   GET/PUT /memo/<token> -> 备忘录免密通道（token === env.MEMO_TOKEN，零配置）
+//   GET/PUT /memo/<错误token> -> 404
 // 语义：服务端不解析业务内容，只做「原样存取 + JSON 合法性校验」。
-// 鉴权：Authorization: Bearer <env.SYNC_KEY>，不匹配 401。
 // CORS：Access-Control-Allow-Origin 取自 env.ALLOW_ORIGIN。
-// KV：key "vault" 与 key "memo"（复用同一 namespace）。
+// KV：key "vault" / key "memo"（复用同一 namespace）。
+// 说明：/memo/<token> 为「不可猜路径」的简化通道，适合日常内容；敏感数据请用密码库。
 
 const KEY_BY_PATH = { "/vault": "vault", "/memo": "memo" };
 
@@ -31,15 +31,28 @@ export default {
     let path = url.pathname;
     if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
 
-    const kvKey = KEY_BY_PATH[path];
+    let kvKey = null;
+    let needAuth = true;
+    if (KEY_BY_PATH[path]) {
+      kvKey = KEY_BY_PATH[path];
+      needAuth = true;
+    } else if (path.indexOf("/memo/") === 0) {
+      const t = path.slice(6);
+      if (t && env.MEMO_TOKEN && t === env.MEMO_TOKEN) {
+        kvKey = "memo";
+        needAuth = false;
+      }
+    }
     if (!kvKey) {
       return jsonResp({ error: "Not Found" }, 404, corsHeaders);
     }
 
-    const auth = request.headers.get("Authorization") || "";
-    const expected = "Bearer " + (env.SYNC_KEY || "");
-    if (!env.SYNC_KEY || auth !== expected) {
-      return jsonResp({ error: "Unauthorized" }, 401, corsHeaders);
+    if (needAuth) {
+      const auth = request.headers.get("Authorization") || "";
+      const expected = "Bearer " + (env.SYNC_KEY || "");
+      if (!env.SYNC_KEY || auth !== expected) {
+        return jsonResp({ error: "Unauthorized" }, 401, corsHeaders);
+      }
     }
 
     if (request.method === "GET") {
