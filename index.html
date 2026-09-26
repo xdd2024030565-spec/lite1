@@ -226,6 +226,15 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .vault-gen-row input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);margin:0}
 .vault-gen-btn{width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit}
 .vault-empty{text-align:center;color:var(--fg2);padding:40px 20px;font-size:.9rem}
+/* ========== 密码库同步栏 ========== */
+.vault-sync-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;padding:10px 12px;background:var(--bg2);border-radius:10px;flex-wrap:wrap;font-size:.82rem;color:var(--fg2)}
+.vault-sync-bar button{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:.82rem;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
+.vault-sync-bar button:hover{border-color:var(--accent);color:var(--accent)}
+.vault-sync-bar button:disabled{opacity:.4;cursor:default}
+.vault-sync-bar .vault-sync-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:.82rem}
+.vault-sync-bar .vault-sync-ts{margin-left:auto;font-size:.75rem;color:var(--fg2);white-space:nowrap}
+.vault-sync-bar .vault-sync-on{color:var(--accent);font-weight:600}
+.vault-sync-bar .vault-sync-cfg{padding:8px 10px}
 </style>
 </head>
 <body>
@@ -1137,11 +1146,14 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       });
     });
   }
-  function vaultSave(){
+    function vaultSave(){
     if(!V.unlocked||!V.key) return Promise.resolve();
     var json=JSON.stringify(V.items||[]);
     return vaultAesEncrypt(V.key,json).then(function(env){
       safeLS('setItem',VAULT_CIPHER_KEY,JSON.stringify(env));
+      vaultSetLocalTs(Date.now());
+      vaultRenderSyncTs();
+      vaultAutoSyncSchedule();
     });
   }
   function vaultLock(){
@@ -1298,7 +1310,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     wrap.appendChild(reset);
     return wrap;
   }
-  function vaultBuildMain(){
+    function vaultBuildMain(){
     var wrap=vEl("div");
     var search=vEl("input",{class:"vault-search",type:"text",placeholder:"搜索标题 / 用户名 / 网址 / 备注...",value:V.query});
     search.addEventListener("input",function(){V.query=this.value;vaultRenderList();});
@@ -1307,6 +1319,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var lockBtn=vEl("button",{class:"vault-lock-btn",text:"🔒 上锁"});
     lockBtn.addEventListener("click",function(){vaultLock();showToast("密码库已上锁",null,null);});
     wrap.appendChild(vEl("div",{class:"vault-toolbar"},[search,addBtn,lockBtn]));
+    wrap.appendChild(vaultBuildSyncBar());
     wrap.appendChild(vEl("div",{id:"vaultFormWrap"}));
     wrap.appendChild(vEl("div",{class:"vault-tabs",id:"vaultTabs"}));
     wrap.appendChild(vEl("div",{id:"vaultList"}));
@@ -1525,6 +1538,274 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     });
   }
 
+  // ====== 密码库云同步 ======
+  // 云端文件结构（明文时间戳 + 密文信封，不含任何明文条目）：
+  // {
+  //   "meta":    { salt: "...", iter: 600000, ver: { iv: "...", ct: "..." } },
+  //   "cipher":  { iv: "...", ct: "..." },
+  //   "updatedAt": 1730000000000
+  // }
+  // meta.ver 与 cipher 均为 AES-GCM 密文，salt/iter/updatedAt 为可公开参数。
+  var VAULT_SYNC_FILE="vault.json";
+  var VAULT_SYNC_TS_KEY="vault_local_ts";
+  var VAULT_SYNC_ON_KEY="vault_sync_enabled";
+  var vaultSyncSha=null;
+  var vaultSyncBusy=false;
+  var vaultSyncEnabled=safeLS('getItem',VAULT_SYNC_ON_KEY)==="1";
+  var vaultSyncTimer=null;
+
+  function vaultGetLocalTs(){return parseInt(safeLS('getItem',VAULT_SYNC_TS_KEY)||"0",10)||0;}
+  function vaultSetLocalTs(ts){safeLS('setItem',VAULT_SYNC_TS_KEY,String(ts||Date.now()));}
+  function vaultSyncGetCustomUrl(){return (safeLS('getItem','vault_sync_url')||"").trim();}
+  function vaultSyncGetCustomKey(){return safeLS('getItem','vault_sync_key')||"";}
+
+  function vaultBuildSyncPayload(withNow){
+    var metaStr=safeLS('getItem',VAULT_META_KEY);
+    var cipherStr=safeLS('getItem',VAULT_CIPHER_KEY);
+    if(!metaStr||!cipherStr) return null;
+    var meta,cipher;
+    try{meta=JSON.parse(metaStr);}catch(e){return null;}
+    try{cipher=JSON.parse(cipherStr);}catch(e){return null;}
+    return {meta:meta,cipher:cipher,updatedAt:withNow?Date.now():(vaultGetLocalTs()||Date.now())};
+  }
+
+  // --- 通道一：GitHub Contents API（经现有代理） ---
+  function vaultSyncGhRead(){
+    var path="/repos/"+OWNER+"/"+REPO+"/contents/"+VAULT_SYNC_FILE+"?ref="+BRANCH;
+    return ghReq("GET",path).then(function(d){
+      vaultSyncSha=d.sha||null;
+      if(!d.content||d.encoding!=="base64") return null;
+      try{return JSON.parse(b64Decode(d.content));}catch(e){return null;}
+    }).catch(function(e){
+      var msg=String((e&&e.message)||e);
+      if(msg.indexOf("404")!==-1||msg.toLowerCase().indexOf("not found")!==-1){
+        vaultSyncSha=null;
+        return null;
+      }
+      throw e;
+    });
+  }
+  function vaultSyncGhWrite(payload){
+    var content=b64Encode(JSON.stringify(payload,null,2));
+    var body={message:"更新 vault 密文",content:content,branch:BRANCH};
+    if(vaultSyncSha) body.sha=vaultSyncSha;
+    return ghReq("PUT","/repos/"+OWNER+"/"+REPO+"/contents/"+VAULT_SYNC_FILE,body)
+      .then(function(d){vaultSyncSha=(d&&d.content&&d.content.sha)||vaultSyncSha;});
+  }
+
+  // --- 通道二：自定义 URL（若已配置） ---
+  function vaultSyncCustomRead(){
+    var url=vaultSyncGetCustomUrl();
+    if(!url) return Promise.reject(new Error("未配置"));
+    var headers={};
+    var key=vaultSyncGetCustomKey();
+    if(key) headers["Authorization"]="Bearer "+key;
+    return fetch(url,{method:"GET",headers:headers}).then(function(r){
+      if(r.status===404) return null;
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    });
+  }
+  function vaultSyncCustomWrite(payload){
+    var url=vaultSyncGetCustomUrl();
+    if(!url) return Promise.reject(new Error("未配置"));
+    var headers={"Content-Type":"application/json"};
+    var key=vaultSyncGetCustomKey();
+    if(key) headers["Authorization"]="Bearer "+key;
+    return fetch(url,{method:"PUT",headers:headers,body:JSON.stringify(payload)}).then(function(r){
+      if(!r.ok) return r.json().catch(function(){return{};}).then(function(e){throw new Error(e.error||("HTTP "+r.status));});
+      return r.json().catch(function(){return{ok:true};});
+    });
+  }
+
+  // --- 读写包装：优先自定义 URL，失败回落 GitHub ---
+  function vaultSyncRead(){
+    var customUrl=vaultSyncGetCustomUrl();
+    if(customUrl){
+      return vaultSyncCustomRead().catch(function(){return vaultSyncGhRead();});
+    }
+    return vaultSyncGhRead();
+  }
+  function vaultSyncWrite(payload){
+    var customUrl=vaultSyncGetCustomUrl();
+    if(customUrl){
+      return vaultSyncCustomWrite(payload).catch(function(){
+        return vaultSyncGhRead().then(function(){return vaultSyncGhWrite(payload);});
+      });
+    }
+    return vaultSyncGhRead().then(function(){return vaultSyncGhWrite(payload);});
+  }
+
+  // --- 时间戳比较：差值 <5s 视为冲突 ---
+  function vaultSyncCompare(localTs,remoteTs){
+    if(Math.abs(localTs-remoteTs)<5000) return "conflict";
+    return localTs>remoteTs?"local":"remote";
+  }
+
+  // --- 应用云端数据到本地（不做明文合并） ---
+  function vaultApplyRemote(remote){
+    if(!remote||!remote.meta||!remote.cipher) return Promise.reject(new Error("云端数据不完整"));
+    var localMeta;
+    try{localMeta=JSON.parse(safeLS('getItem',VAULT_META_KEY)||"null");}catch(e){localMeta=null;}
+    var sameSalt=localMeta&&remote.meta&&localMeta.salt===remote.meta.salt&&localMeta.iter===remote.meta.iter;
+    var finish=function(){
+      safeLS('setItem',VAULT_META_KEY,JSON.stringify(remote.meta));
+      safeLS('setItem',VAULT_CIPHER_KEY,JSON.stringify(remote.cipher));
+      vaultSetLocalTs(parseInt(remote.updatedAt,10)||Date.now());
+    };
+    if(sameSalt&&V.unlocked&&V.key){
+      return vaultAesDecrypt(V.key,remote.cipher.iv,remote.cipher.ct).then(function(json){
+        try{V.items=JSON.parse(json);}catch(e){throw new Error("云端数据解密后解析失败");}
+        if(!Array.isArray(V.items)) V.items=[];
+        finish();
+        vaultRender();
+        showToast("✅ 已应用云端数据",null,null);
+      });
+    }
+    finish();
+    V.key=null;V.items=null;V.unlocked=false;V.editingId=null;
+    if(V.lockTimer){clearTimeout(V.lockTimer);V.lockTimer=null;}
+    vaultRender();
+    showToast("云端使用不同加密参数，请用主密码重新解锁",null,null);
+    return Promise.resolve();
+  }
+
+  // --- 手动上传 ---
+  function vaultUploadToCloud(){
+    if(!V.unlocked){showToast("请先解锁密码库",null,null);return Promise.resolve();}
+    if(vaultSyncBusy){showToast("同步进行中",null,null);return Promise.resolve();}
+    var payload=vaultBuildSyncPayload(true);
+    if(!payload){showToast("本地暂无可上传的密文",null,null);return Promise.resolve();}
+    vaultSyncBusy=true;
+    showToast("⬆️ 正在上传...",null,null);
+    return vaultSyncWrite(payload).then(function(){
+      vaultSetLocalTs(payload.updatedAt);
+      vaultRenderSyncTs();
+      vaultSyncBusy=false;
+      showToast("✅ 已上传到云端",null,null);
+    }).catch(function(e){
+      vaultSyncBusy=false;
+      showToast("上传失败："+(e.message||e),null,null);
+    });
+  }
+
+  // --- 手动拉取 ---
+  function vaultDownloadFromCloud(){
+    if(!V.unlocked){showToast("请先解锁密码库",null,null);return Promise.resolve();}
+    if(vaultSyncBusy){showToast("同步进行中",null,null);return Promise.resolve();}
+    vaultSyncBusy=true;
+    showToast("⬇️ 正在拉取...",null,null);
+    return vaultSyncRead().then(function(remote){
+      if(!remote||!remote.meta||!remote.cipher){
+        vaultSyncBusy=false;
+        showToast("云端暂无数据",null,null);
+        return;
+      }
+      var localTs=vaultGetLocalTs();
+      var remoteTs=parseInt(remote.updatedAt,10)||0;
+      var winner=vaultSyncCompare(localTs,remoteTs);
+      if(winner==="local"){
+        vaultSyncBusy=false;
+        if(!confirm("本地版本较新，仍要用云端覆盖吗？")){showToast("已取消",null,null);return;}
+      }else if(winner==="conflict"){
+        vaultSyncBusy=false;
+        if(!confirm("本地与云端时间非常接近，可能发生冲突。\n\n用云端覆盖本地？（不会做明文合并）")){showToast("已取消",null,null);return;}
+      }
+      vaultSyncBusy=true;
+      return vaultApplyRemote(remote).then(function(){vaultSyncBusy=false;});
+    }).catch(function(e){
+      vaultSyncBusy=false;
+      showToast("拉取失败："+(e.message||e),null,null);
+    });
+  }
+
+  // --- 自动同步（保存后 3 秒防抖） ---
+  function vaultAutoSyncNow(){
+    if(!vaultSyncEnabled||!V.unlocked||vaultSyncBusy) return;
+    if(!vaultBuildSyncPayload(false)) return;
+    vaultSyncBusy=true;
+    vaultSyncRead().then(function(remote){
+      if(!remote||!remote.meta||!remote.cipher){vaultSyncBusy=false;return;}
+      var localTs=vaultGetLocalTs();
+      var remoteTs=parseInt(remote.updatedAt,10)||0;
+      var winner=vaultSyncCompare(localTs,remoteTs);
+      if(winner==="remote"){
+        var localMeta;
+        try{localMeta=JSON.parse(safeLS('getItem',VAULT_META_KEY)||"null");}catch(e){localMeta=null;}
+        if(localMeta&&localMeta.salt===remote.meta.salt){
+          return vaultApplyRemote(remote).then(function(){vaultSyncBusy=false;});
+        }
+        vaultSyncBusy=false;
+        showToast("云端为不同加密参数，请手动拉取",null,null);
+      }else if(winner==="local"){
+        var payload=vaultBuildSyncPayload(true);
+        return vaultSyncWrite(payload).then(function(){
+          vaultSetLocalTs(payload.updatedAt);
+          vaultRenderSyncTs();
+          vaultSyncBusy=false;
+        }).catch(function(){vaultSyncBusy=false;});
+      }else{
+        vaultSyncBusy=false;
+      }
+    }).catch(function(){vaultSyncBusy=false;});
+  }
+  function vaultAutoSyncSchedule(){
+    if(!vaultSyncEnabled) return;
+    if(vaultSyncTimer) clearTimeout(vaultSyncTimer);
+    vaultSyncTimer=setTimeout(function(){vaultAutoSyncNow();},3000);
+  }
+  function vaultSetAutoSync(on){
+    vaultSyncEnabled=!!on;
+    safeLS('setItem',VAULT_SYNC_ON_KEY,on?"1":"0");
+    if(vaultSyncTimer){clearTimeout(vaultSyncTimer);vaultSyncTimer=null;}
+    vaultRenderSyncTs();
+    showToast(on?"☁️ 自动同步已开启":"自动同步已关闭",null,null);
+    if(on) vaultAutoSyncSchedule();
+  }
+
+  // --- 同步栏 UI ---
+  function vaultBuildSyncBar(){
+    var bar=vEl("div",{class:"vault-sync-bar"});
+    var up=vEl("button",{text:"⬆️ 上传到云端"});
+    up.addEventListener("click",function(){vaultUploadToCloud();});
+    var down=vEl("button",{text:"⬇️ 从云端拉取"});
+    down.addEventListener("click",function(){vaultDownloadFromCloud();});
+    bar.appendChild(up);bar.appendChild(down);
+    var togLbl=vEl("label",{class:"vault-sync-toggle"});
+    var tog=vEl("input",{type:"checkbox",checked:vaultSyncEnabled});
+    tog.addEventListener("change",function(){vaultSetAutoSync(this.checked);});
+    togLbl.appendChild(tog);
+    togLbl.appendChild(document.createTextNode("☁️ 自动同步"));
+    bar.appendChild(togLbl);
+    var cfg=vEl("button",{class:"vault-sync-cfg",title:"同步设置（自定义 URL / 密钥）",text:"⚙️"});
+    cfg.addEventListener("click",function(){
+      var curUrl=vaultSyncGetCustomUrl();
+      var curKey=vaultSyncGetCustomKey();
+      var url=prompt("自定义同步 URL（留空则仅使用 GitHub 通道）",curUrl);
+      if(url===null) return;
+      url=url.trim();
+      if(url){safeLS('setItem','vault_sync_url',url);}
+      else{safeLS('removeItem','vault_sync_url');}
+      if(url){
+        var key=prompt("同步密钥（Authorization: Bearer）",curKey);
+        if(key===null) key=curKey;
+        safeLS('setItem','vault_sync_key',key||"");
+      }
+      showToast("同步设置已保存",null,null);
+    });
+    bar.appendChild(cfg);
+    var ts=vEl("span",{class:"vault-sync-ts",id:"vaultSyncTs"});
+    bar.appendChild(ts);
+    setTimeout(vaultRenderSyncTs,0);
+    return bar;
+  }
+  function vaultRenderSyncTs(){
+    var el=$("vaultSyncTs");if(!el) return;
+    var ts=vaultGetLocalTs();
+    el.textContent=ts?"本地更新："+new Date(ts).toLocaleString():"尚未同步";
+    if(vaultSyncEnabled) el.classList.add("vault-sync-on");
+    else el.classList.remove("vault-sync-on");
+  }
   // ====== 事件绑定 ======
   $("guestCard").onclick=handleGuestLogin;
   $("adminCard").onclick=showLoginForm;
