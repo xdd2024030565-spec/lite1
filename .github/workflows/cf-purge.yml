@@ -1,0 +1,47 @@
+name: Purge Cloudflare Cache (nav HTML)
+
+# 每次发布后自动清理 Cloudflare 边缘缓存，避免「发版了但用户仍看到旧版」。
+# 前置：仓库 Settings → Secrets and variables → Actions 添加：
+#   CF_API_TOKEN  —— Cloudflare API 令牌（Zone → Cache Purge → Purge）
+#   CF_ZONE_ID    —— ccwu.cc 的 Zone ID
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'reader.html'
+      - 'worker/**'
+  workflow_dispatch:
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge nav HTML cache
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ZONE_ID" ]; then
+            echo "::warning::CF_API_TOKEN / CF_ZONE_ID 未配置，跳过清理"
+            exit 0
+          fi
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"files":["https://nav.yongjiu.ccwu.cc/","https://nav.yongjiu.ccwu.cc/index.html","https://nav.yongjiu.ccwu.cc/reader.html"]}' \
+            -o /tmp/purge.json
+          cat /tmp/purge.json
+          if grep -q '"success":true' /tmp/purge.json; then
+            echo "Cloudflare 缓存清理成功"
+          else
+            echo "::error::清理失败，请检查 Token 权限（需 Zone → Cache Purge → Purge）"
+            exit 1
+          fi
+
+      - name: Verify live version
+        run: |
+          sleep 2
+          echo -n "nav 域最新标记(panel-vault) count: "
+          curl -s "https://nav.yongjiu.ccwu.cc/index.html?cb=$RANDOM" | grep -c 'panel-vault' || true
