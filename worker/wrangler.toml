@@ -1,0 +1,16 @@
+name = "vault-sync"
+main = "vault-sync.js"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "VAULT_KV"
+id = "<把这里替换成 wrangler kv namespace create 输出的 id>"
+
+[vars]
+ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc"
+# SYNC_KEY 建议用 `wrangler secret put SYNC_KEY` 单独设置，不要写进 toml
+
+# 可选：绑定自定义域
+# [[routes]]
+# pattern = "vault-sync.ccwu.cc/*"
+# zone_name = "ccwu.cc"
