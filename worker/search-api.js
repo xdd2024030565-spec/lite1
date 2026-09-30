@@ -1,6 +1,6 @@
-// search-api · 站内搜索 + 站内预览 Worker（v1）
+// search-api · 站内搜索 + 站内预览 Worker（v2）
 // 路由：
-//   GET /search?q=关键词[&n=20]   -> 多源搜索聚合（Bing RSS 主源 → 百度 HTML → Bing HTML）
+//   GET /search?q=关键词[&n=20][&page=1]   -> 多源搜索聚合（Bing RSS 主源 → 百度 HTML → Bing HTML），支持翻页
 //   GET /browse?url=<绝对URL>     -> iframe 内嵌代理（去 XFO/CSP、注入 <base>、编码兼容、反 frame-busting）
 //   GET /read?url=<绝对URL>       -> 阅读模式兜底（服务端抽取正文，返回极简可读 HTML）
 //   GET /health                   -> {ok:true}
@@ -140,11 +140,17 @@ async function handleSearch(url) {
   const q = (url.searchParams.get("q") || "").trim();
   if (!q) return json({ error: "missing q" }, 400);
   const limit = Math.min(parseInt(url.searchParams.get("n") || "20", 10) || 20, 30);
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
+  const skip = (page - 1) * limit;
+
+  const bingRssUrl = "https://www.bing.com/search?q=" + encodeURIComponent(q) + "&format=rss&count=20" + (page > 1 ? "&first=" + (skip + 1) : "");
+  const baiduUrl = "https://www.baidu.com/s?wd=" + encodeURIComponent(q) + "&rn=20" + (page > 1 ? "&pn=" + skip : "");
+  const bingHtmlUrl = "https://www.bing.com/search?q=" + encodeURIComponent(q) + "&setlang=zh-CN" + (page > 1 ? "&first=" + (skip + 1) : "");
 
   const steps = [
-    { name: "bing-rss", run: function () { return timedFetch("https://www.bing.com/search?q=" + encodeURIComponent(q) + "&format=rss&count=20", { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" } }, 8000).then(function (r) { return r.text(); }).then(parseBingRSS); } },
-    { name: "baidu", run: function () { return timedFetch("https://www.baidu.com/s?wd=" + encodeURIComponent(q) + "&rn=20", { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBaidu); } },
-    { name: "bing-html", run: function () { return timedFetch("https://www.bing.com/search?q=" + encodeURIComponent(q) + "&setlang=zh-CN", { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBingHTML); } }
+    { name: "bing-rss", run: function () { return timedFetch(bingRssUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" } }, 8000).then(function (r) { return r.text(); }).then(parseBingRSS); } },
+    { name: "baidu", run: function () { return timedFetch(baiduUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBaidu); } },
+    { name: "bing-html", run: function () { return timedFetch(bingHtmlUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBingHTML); } }
   ];
 
   const merged = [], seenHost = {}, tried = [];
@@ -167,7 +173,7 @@ async function handleSearch(url) {
       tried.push(s.name + ":ERR");
     }
   }
-  return json({ q: q, engine: tried[0] || "", tried: tried, count: merged.length, results: merged });
+  return json({ q: q, engine: tried[0] || "", tried: tried, count: merged.length, page: page, results: merged });
 }
 
 // ---------- 通用：取页面 + 解码 ----------
