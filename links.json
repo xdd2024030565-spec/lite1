@@ -36,6 +36,15 @@
   ],
   "links": [
     {
+      "id": "mup4a8cavno1b",
+      "url": "https://platform.sensenova.cn/console",
+      "title": "https://platform.sensenova.cn/console",
+      "categoryId": "mtpf5a1lzn0d3",
+      "note": "",
+      "pinned": false,
+      "added": "2026-10-01T05:52:10.426Z"
+    },
+    {
       "id": "muicqlhdfnxis",
       "url": "https://wispbyte.com/client/servers/b53924da/console",
       "title": "wispbyte",
