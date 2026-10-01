@@ -428,12 +428,17 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   <div class="panel" id="panel-themes">
     <div class="page-header"><h1>风格切换</h1></div>
     <div class="theme-grid" id="themeGrid"></div>
-    <button class="action-btn" id="importThemeBtn">📥 导入风格文件 (.css)</button>
-    <input type="file" id="importThemeFile" accept=".css" style="display:none;">
+    <button class="action-btn" id="importThemeBtn">📥 导入风格文件（.css / .json / .yaml / .toml）</button>
+    <input type="file" id="importThemeFile" accept=".css,.json,.yaml,.yml,.toml,.plist,.itermcolors" style="display:none;">
     <button class="action-btn" id="exportThemeBtn">📤 导出当前风格</button>
     <div class="theme-help">
-      <b>风格文件格式</b>：CSS 变量文件，包含如下格式的变量定义：<code>:root { --bg: #f0f6ff; --accent: #0066cc; --card: #dbeafe; /* ...更多变量 */ }</code>
-      可从网上下载 CSS 主题文件，或自己编写，导入后即可切换使用。<br>
+      <b>风格文件格式</b>：支持以下格式，导入后自动识别并映射为站点配色：<code>:root { --bg: #f0f6ff; --accent: #0066cc; /* ... */ }</code><br>
+      📄 <b>CSS 变量</b>（.css）：解析 :root 内的 --bg/--accent 等变量<br>
+      🎨 <b>VS Code 主题</b>（.json）：editor.background→--bg、button.background→--accent 等自动映射<br>
+      🧬 <b>Base16/Base24</b>（.yaml/.json）：base00→--bg、base0D→--accent、base08→--danger<br>
+      🖥️ <b>Windows Terminal</b>（.json）、<b>Alacritty</b>（.toml）、<b>iTerm2</b>（.plist/.itermcolors）：终端配色自动映射<br>
+      🌈 <b>Open Props</b>：--gray-0/--blue-6 等通用 CSS 变量库自动映射<br>
+      可从网上下载上述任一格式主题文件，导入后即可切换使用。<br>
       <b>支持变量</b>：--bg --bg2 --fg --fg2 --border --accent --accent-bg --danger --card --sidebar-bg --topbar-bg --radius
     </div>
   </div>
@@ -592,18 +597,168 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }
     return vars;
   }
+
+  // ====== 颜色工具 ======
+  function normColor(c,fb){
+    if(!c) return fb||"";
+    c=String(c).trim();
+    if(/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(c)){
+      if(c.length===4) c="#"+c[1]+c[1]+c[2]+c[2]+c[3]+c[3];
+      else if(c.length===5) c="#"+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]+c[4]+c[4];
+      return c.slice(0,7).toLowerCase();
+    }
+    var m=c.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+    if(m) return "#"+[1,2,3].map(function(i){return (+m[i]).toString(16).padStart(2,"0");}).join("");
+    return fb||"";
+  }
+  function withAlpha(hex,a){
+    var h=normColor(hex); if(!h) return "";
+    var r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
+    return "rgba("+r+","+g+","+b+","+a+")";
+  }
+  function pick(){
+    for(var i=0;i<arguments.length;i++){ if(arguments[i]!==undefined&&arguments[i]!==null&&arguments[i]!=="") return arguments[i]; }
+    return "";
+  }
+  function stripJSONC(t){
+    return String(t).replace(/\/\*[\s\S]*?\*\//g,"").replace(/(^|[^:])\/\/.*$/gm,"$1");
+  }
+  function parseVSCodeTheme(text){
+    var json; try{ json=JSON.parse(stripJSONC(text)); }catch(e){ return null; }
+    var c=json.colors||{};
+    var comment="";
+    if(json.tokenColors&&json.tokenColors.length){
+      for(var i=0;i<json.tokenColors.length;i++){
+        var tk=json.tokenColors[i], sc=tk.scope, arr=Array.isArray(sc)?sc:[sc];
+        for(var j=0;j<arr.length;j++){ if(arr[j]&&/comment/.test(String(arr[j]))){ comment=(tk.settings&&tk.settings.foreground)||""; break; } }
+        if(comment) break;
+      }
+    }
+    if(!c["editor.background"]&&!c["editor.foreground"]&&!c["panel.background"]&&!comment) return null;
+    var vars={};
+    vars["--bg"]=normColor(pick(c["editor.background"],c["panel.background"]));
+    vars["--bg2"]=normColor(pick(c["sideBar.background"],c["activityBar.background"],c["editorWidget.background"]));
+    vars["--fg"]=normColor(pick(c["editor.foreground"],c["foreground"]));
+    vars["--fg2"]=normColor(pick(c["descriptionForeground"],c["input.placeholderForeground"],comment));
+    vars["--border"]=normColor(pick(c["panel.border"],c["editorGroup.border"],c["contrastBorder"],c["focusBorder"]));
+    var accent=pick(c["button.background"],c["textLink.foreground"],c["activityBarBadge.background"],c["terminal.ansiBlue"],c["focusBorder"]);
+    vars["--accent"]=normColor(accent);
+    vars["--accent-bg"]=normColor(pick(c["list.activeSelectionBackground"],c["editor.selectionBackground"]))||withAlpha(accent,.18);
+    vars["--danger"]=normColor(pick(c["errorForeground"],c["terminal.ansiRed"],c["problemsErrorIcon.foreground"]));
+    vars["--card"]=normColor(pick(c["editorWidget.background"],c["panel.background"],c["sideBar.background"]));
+    vars["--sidebar-bg"]=normColor(pick(c["sideBar.background"],c["activityBar.background"]));
+    vars["--topbar-bg"]=normColor(pick(c["titleBar.activeBackground"],c["statusBar.background"]));
+    vars["--radius"]="8px";
+    var out={}; for(var k in vars){ if(vars[k]) out[k]=vars[k]; }
+    return Object.keys(out).length?{vars:out,name:json.name||"VS Code 主题",format:"vs-code"}:null;
+  }
+  function parseBase16Theme(text){
+    var obj=null, palette={}, trimmed=text.trim();
+    try{ if(trimmed.charAt(0)==="{"||trimmed.charAt(0)==="["){ obj=JSON.parse(trimmed); } }catch(e){}
+    if(obj){ palette=obj.palette||obj; if(!obj.palette&&obj.base00) palette=obj; if(typeof palette==="object"&&!palette.base00&&palette.scheme&&palette.author){ palette=palette; } }
+    else{ var re=/(base(?:0[0-9A-Fa-f]|1[0-7]))\s*[:=]\s*["']?(#[0-9a-fA-F]{3,8}|[0-9a-fA-F]{6})/g; var m; while(m=re.exec(text)) palette[m[1].toLowerCase()]=m[2]; }
+    if(!palette.base00&&!palette.base05&&!palette["base00"]&&!palette["base05"]) return null;
+    function p(k){ var v=palette[k]||palette[k.toLowerCase()]||palette[k.toUpperCase()]; return v?normColor(v):""; }
+    var vars={};
+    vars["--bg"]=p("base00"); vars["--bg2"]=p("base01"); vars["--fg"]=p("base05");
+    vars["--fg2"]=p("base04")||p("base03"); vars["--border"]=p("base02")||p("base03");
+    vars["--accent"]=p("base0D")||p("base0E"); vars["--accent-bg"]=p("base02"); vars["--danger"]=p("base08");
+    vars["--card"]=p("base01"); vars["--sidebar-bg"]=p("base01"); vars["--topbar-bg"]=p("base01"); vars["--radius"]="8px";
+    var out={}; for(var k2 in vars){ if(vars[k2]) out[k2]=vars[k2]; }
+    return Object.keys(out).length?{vars:out,name:(obj&&obj.scheme)?obj.scheme:"Base16 主题",format:"base16"}:null;
+  }
+  function parseWindowsTerminalTheme(text){
+    var json; try{ json=JSON.parse(stripJSONC(text)); }catch(e){ return null; }
+    var s=Array.isArray(json.schemes)?json.schemes[0]:(json&&(json.background||json.foreground||json.colorTable)?json:null);
+    if(!s) return null;
+    var t=s, colorTable=Array.isArray(s.colorTable)?s.colorTable:null;
+    if(colorTable){ t={background:s.background,foreground:s.foreground,cursorColor:s.cursorColor,selectionBackground:s.selectionBackground,black:colorTable[0],red:colorTable[1],green:colorTable[2],yellow:colorTable[3],blue:colorTable[4],purple:colorTable[5],cyan:colorTable[6],white:colorTable[7],brightBlack:colorTable[8]}; }
+    if(!t.background&&!t.foreground) return null;
+    var vars={};
+    vars["--bg"]=normColor(t.background); vars["--bg2"]=normColor(t.brightBlack||t.black);
+    vars["--fg"]=normColor(t.foreground); vars["--fg2"]=normColor(t.brightBlack||t.white);
+    vars["--border"]=normColor(t.brightBlack||t.selectionBackground);
+    vars["--accent"]=normColor(t.blue||t.cursorColor);
+    vars["--accent-bg"]=normColor(t.selectionBackground)||withAlpha(t.blue||t.cursorColor,.18);
+    vars["--danger"]=normColor(t.red); vars["--card"]=normColor(t.black||t.brightBlack);
+    vars["--sidebar-bg"]=normColor(t.black||t.background); vars["--topbar-bg"]=normColor(t.black||t.brightBlack);
+    vars["--radius"]="8px";
+    var out={}; for(var k in vars){ if(vars[k]) out[k]=vars[k]; }
+    return Object.keys(out).length?{vars:out,name:s.name||"Windows Terminal 主题",format:"windows-terminal"}:null;
+  }
+  function parseAlacrittyTheme(text){
+    var sec={}, cur="";
+    var lines=text.split(/\r?\n/);
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i].replace(/^\s*#.*$/,"").trim(); if(!line) continue;
+      if(/^\[[^\]]+\]$/.test(line)){ cur=line.slice(1,-1).trim(); continue; }
+      var m=line.match(/^([\w.-]+)\s*=\s*["']?(#[0-9a-fA-F]{3,8}|[^"'\s#]+)/);
+      if(m) sec[cur+"."+m[1]]=m[2];
+    }
+    var get=function(k){ return sec[k]||""; };
+    if(!get("colors.primary.background")&&!get("colors.primary.foreground")) return null;
+    var vars={};
+    vars["--bg"]=normColor(get("colors.primary.background")); vars["--bg2"]=normColor(get("colors.normal.black")||get("colors.bright.black"));
+    vars["--fg"]=normColor(get("colors.primary.foreground")); vars["--fg2"]=normColor(get("colors.bright.black")||get("colors.normal.white"));
+    vars["--border"]=normColor(get("colors.bright.black")||get("colors.selection.background"));
+    vars["--accent"]=normColor(get("colors.normal.blue")||get("colors.cursor.cursor"));
+    vars["--accent-bg"]=normColor(get("colors.selection.background"))||withAlpha(get("colors.normal.blue"),.18);
+    vars["--danger"]=normColor(get("colors.normal.red"));
+    vars["--card"]=normColor(get("colors.normal.black")||get("colors.bright.black"));
+    vars["--sidebar-bg"]=normColor(get("colors.normal.black")); vars["--topbar-bg"]=normColor(get("colors.normal.black"));
+    vars["--radius"]="8px";
+    var out={}; for(var k in vars){ if(vars[k]) out[k]=vars[k]; }
+    return Object.keys(out).length?{vars:out,name:"Alacritty 主题",format:"alacritty"}:null;
+  }
+  function parseOpenPropsTheme(cssText){
+    var raw={}, re=/--([a-zA-Z0-9_-]+)\s*:\s*([^;]+);/g, m;
+    while(m=re.exec(cssText)) raw["--"+m[1]]=m[2].trim();
+    if(!raw["--gray-0"]&&!raw["--gray-1"]&&!raw["--blue-6"]) return null;
+    function v(n){ return raw["--"+n]||""; }
+    var vars={};
+    vars["--bg"]=v("gray-0")||v("gray-12"); vars["--bg2"]=v("gray-1")||v("gray-11");
+    vars["--fg"]=v("gray-9")||v("gray-2"); vars["--fg2"]=v("gray-7")||v("gray-4");
+    vars["--border"]=v("gray-3")||v("gray-8"); vars["--accent"]=v("blue-6")||v("cyan-6");
+    vars["--accent-bg"]=v("blue-1")||v("blue-10"); vars["--danger"]=v("red-6");
+    vars["--card"]=v("gray-0")||v("gray-10"); vars["--sidebar-bg"]=v("gray-1")||v("gray-11");
+    vars["--topbar-bg"]=v("gray-0")||v("gray-10"); vars["--radius"]=v("radius-2")||v("radius-3")||"8px";
+    var out={}; for(var k in vars){ if(vars[k]) out[k]=vars[k]; }
+    return Object.keys(out).length?{vars:out,name:"Open Props 主题",format:"open-props"}:null;
+  }
+  function parseThemeByFormat(text,filename){
+    var name=(filename||"").toLowerCase();
+    var r=null;
+    if(/vs-?code|.json$/i.test(name)&&text.indexOf("editor.background")>-1) r=parseVSCodeTheme(text);
+    if(!r&&(/base16|.yaml|.yml/i.test(name)||text.indexOf("base00")>-1)) r=parseBase16Theme(text);
+    if(!r&&(/terminal|.json$/i.test(name)&&(text.indexOf("colorTable")>-1||text.indexOf("cursorColor")>-1||text.indexOf("selectionBackground")>-1))) r=parseWindowsTerminalTheme(text);
+    if(!r&&(/alacritty|.toml/i.test(name)||text.indexOf("[colors.primary]")>-1)) r=parseAlacrittyTheme(text);
+    if(!r&&(/open-?props|openprops/i.test(name)||(text.indexOf("--gray-0")>-1&&text.indexOf("--blue-6")>-1))) r=parseOpenPropsTheme(text);
+    if(!r&&text.indexOf("base00")>-1) r=parseBase16Theme(text);
+    if(!r&&/vs-?code/i.test(name)) r=parseVSCodeTheme(text);
+    if(!r&&/terminal/i.test(name)) r=parseWindowsTerminalTheme(text);
+    if(!r&&/open-?props/i.test(name)) r=parseOpenPropsTheme(text);
+    if(!r&&/alacritty/i.test(name)) r=parseAlacrittyTheme(text);
+    if(!r) r=parseVSCodeTheme(text)||parseWindowsTerminalTheme(text)||parseBase16Theme(text)||parseOpenPropsTheme(text)||parseAlacrittyTheme(text);
+    return r;
+  }
   function importThemeFile(ev){
     var f=ev.target.files[0]; if(!f) return;
     var r=new FileReader();
     r.onload=function(e){
-      var vars=parseCSSVars(e.target.result);
-      if(Object.keys(vars).length===0){ showToast("未找到CSS变量",null,null); return; }
-      var name=f.name.replace(/\.css$/i,"");
+      var text=e.target.result;
+      var vars=parseCSSVars(text);
+      var fmt="css";
+      if(Object.keys(vars).length===0){
+        var parsed=parseThemeByFormat(text,f.name);
+        if(!parsed){ showToast("未能识别主题格式",null,null); return; }
+        vars=parsed.vars; fmt=parsed.format;
+      }
+      var name=f.name.replace(/\.(css|json|yaml|yml|toml|plist|itermcolors)$/i,"");
       var themes=getCustomThemes();
-      themes.push({id:"custom-"+Date.now(),name:name,type:"custom",vars:vars,preview:{bg:vars["--bg"]||"#fff",accent:vars["--accent"]||"#0071e3"}});
+      themes.push({id:"custom-"+Date.now(),name:name,type:"custom",format:fmt,vars:vars,preview:{bg:vars["--bg"]||"#fff",accent:vars["--accent"]||"#0071e3"}});
       saveCustomThemes(themes);
       renderThemes();
-      showToast("风格导入成功",null,null);
+      showToast("风格导入成功（"+fmt+"）",null,null);
     };
     r.readAsText(f); ev.target.value="";
   }
