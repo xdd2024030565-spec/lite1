@@ -1,6 +1,9 @@
-// search-api · 站内搜索 + 站内预览 Worker（v2）
+// search-api · 站内搜索 + 站内预览 Worker（v3）
 // 路由：
-//   GET /search?q=关键词[&n=20][&page=1]   -> 多源搜索聚合（Bing RSS 主源 → 百度 HTML → Bing HTML），支持翻页
+//   GET /search?q=关键词[&n=20][&page=1]   -> 多源搜索聚合（支持翻页）
+//        · 中文查询：手机百度(可翻页) → DuckDuckGo（Bing 对中文结果质量差，中文时跳过）
+//        · 非中文查询：Bing RSS → Bing HTML → DuckDuckGo → 手机百度
+//        · page 翻页：每源每页前进 10 条（STEP=10），各源带自己的偏移参数
 //   GET /browse?url=<绝对URL>     -> iframe 内嵌代理（去 XFO/CSP、注入 <base>、编码兼容、反 frame-busting）
 //   GET /read?url=<绝对URL>       -> 阅读模式兜底（服务端抽取正文，返回极简可读 HTML）
 //   GET /health                   -> {ok:true}
@@ -19,11 +22,14 @@ export default {
   async fetch(request) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const url = new URL(request.url);
+    const p = url.pathname;
+    // 兼容 /search-api/*、/v3/* 之类的路径前缀（与原版一致的“后缀匹配”）
+    const hit = function (s) { return p === s || p.slice(-1 - s.length) === s; };
     try {
-      if (url.pathname === "/health") return json({ ok: true, ts: Date.now() });
-      if (url.pathname === "/search") return await handleSearch(url);
-      if (url.pathname === "/browse") return await handleBrowse(url);
-      if (url.pathname === "/read") return await handleRead(url);
+      if (hit("/health")) return json({ ok: true, ts: Date.now() });
+      if (hit("/search")) return await handleSearch(url);
+      if (hit("/browse")) return await handleBrowse(url);
+      if (hit("/read")) return await handleRead(url);
       return json({ error: "Not found", routes: ["/search?q=", "/browse?url=", "/read?url=", "/health"] }, 404);
     } catch (e) {
       return json({ error: String((e && e.message) || e) }, 500);
@@ -60,6 +66,30 @@ function decodeEntities(s) {
 function displayUrl(u) {
   try { const x = new URL(u); return x.hostname + (x.pathname && x.pathname !== "/" ? x.pathname : ""); }
   catch (e) { return u || ""; }
+}
+
+function hasCJK(q) {
+  for (let i = 0; i < q.length; i++) {
+    const c = q.charCodeAt(i);
+    if ((c >= 0x3400 && c <= 0x9fff) || (c >= 0xf900 && c <= 0xfaff)) return true;
+  }
+  return false;
+}
+
+// 取某标签后第一段可见文字（自动跳过嵌套的开始标签）
+function textAfterTag(s, j) {
+  let g = s.indexOf(">", j);
+  if (g < 0) return "";
+  let p = g + 1;
+  while (p < s.length && s.charCodeAt(p) === 60) {
+    const gt = s.indexOf(">", p);
+    if (gt < 0) break;
+    p = gt + 1;
+  }
+  let e = p;
+  while (e < s.length && s.charCodeAt(e) !== 60) e++;
+  const t = decodeEntities(s.slice(p, e));
+  return t ? t.slice(0, 160) : "";
 }
 
 // ---------- 解析器 ----------
@@ -113,23 +143,76 @@ function parseBingHTML(html) {
   return out.length ? out : null;
 }
 
-function parseBaidu(html) {
-  if (!html) return null;
-  if (html.indexOf("class=\"result") < 0 && html.indexOf("class='result") < 0) return null;
-  const parts = html.split(/class=["']result/).slice(1);
+// DuckDuckGo html 版（可能返回 202 反爬页，解析为空即可）
+function parseDDG(html) {
+  if (!html || html.indexOf("result__a") < 0) return null;
+  const QT = String.fromCharCode(34);
   const out = [];
-  for (let i = 0; i < parts.length; i++) {
-    const b = parts[i].slice(0, 6000);
-    const mu = b.match(/mu=["'](https?:\/\/[^"']+)["']/i);
-    const h3 = b.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
-    let snap = "";
-    const hs = b.match(/<h3[^>]*>[\s\S]*?<\/h3>/i);
-    if (hs) b.slice(hs.index + hs[0].length, hs.index + hs[0].length + 400);
-    const sn = b.replace(/[\s\S]*?<\/h3>/, "").match(/^([\s\S]{20,400}?)(<div|<span class="c-color|<\/div>)/i);
-    if (sn) snap = decodeEntities(sn[1]);
-    if (!mu || !h3) continue;
-    const title = decodeEntities(h3[1]);
-    if (title && /^https?:\/\//.test(mu[1])) out.push({ title: title, url: mu[1], snippet: snap.slice(0, 300) });
+  const segs = html.split("result__a");
+  for (let i = 1; i < segs.length && out.length < 40; i++) {
+    const s = segs[i].slice(0, 4000);
+    const g = s.indexOf(">");
+    if (g < 0) continue;
+    const e = s.indexOf("</a>", g);
+    if (e < 0) continue;
+    const title = decodeEntities(s.slice(g + 1, e));
+    let url = "";
+    const hk = s.indexOf("href=");
+    if (hk >= 0) {
+      const q1 = s.indexOf(QT, hk);
+      const q2 = s.indexOf(QT, q1 + 1);
+      if (q1 >= 0 && q2 >= 0) url = s.slice(q1 + 1, q2);
+    }
+    if (url.indexOf("uddg=") >= 0) {
+      const k = url.indexOf("uddg=");
+      let v = url.slice(k + 5);
+      const amp = v.indexOf("&");
+      if (amp >= 0) v = v.slice(0, amp);
+      try { v = decodeURIComponent(v); } catch (err) { }
+      url = v;
+    }
+    if (url.indexOf("//") === 0) url = "https:" + url;
+    if (url.indexOf("y.js") >= 0 || url.indexOf("ad_provider") >= 0) continue;
+    if (!title || !/^https?:\/\//.test(url)) continue;
+    out.push({ title: title, url: url, snippet: "" });
+  }
+  return out.length ? out : null;
+}
+
+// 手机百度：结果块的 data-log 里带 mu=真实URL；标题取 c-title / cos-line-clamp 后的文字
+function parseMbaidu(html) {
+  if (!html) return null;
+  const out = [];
+  const segs = html.split("data-log");
+  for (let i = 1; i < segs.length && out.length < 40; i++) {
+    const s = segs[i].slice(0, 9000);
+    let url = "";
+    let p = 0;
+    while (true) {
+      const k = s.indexOf("mu", p);
+      if (k < 0) break;
+      p = k + 1;
+      const hh = s.indexOf("http", k);
+      if (hh < 0 || hh - k > 90) continue;
+      let e = hh;
+      while (e < s.length) {
+        const c = s.charCodeAt(e);
+        if (c === 38 || c === 34 || c === 39 || c === 60 || c === 92 || c === 62 || c === 32) break;
+        e++;
+      }
+      const v = s.slice(hh, e);
+      if (v.length > 10) { url = v; break; }
+    }
+    if (!url || !/^https?:\/\//.test(url)) continue;
+    if (/^https?:\/\/(m|www)\.baidu\.com\//i.test(url)) continue;
+    if (/bdstatic|bdimg|\.bdstatic\./i.test(url)) continue;
+    let title = "";
+    let j = s.indexOf("c-title");
+    if (j >= 0) title = textAfterTag(s, j);
+    if (!title) { const j2 = s.indexOf("cos-line-clamp"); if (j2 >= 0) title = textAfterTag(s, j2); }
+    if (!title) { const j3 = s.indexOf("c-line-clamp"); if (j3 >= 0) title = textAfterTag(s, j3); }
+    if (!title) continue;
+    out.push({ title: title, url: url, snippet: "" });
   }
   return out.length ? out : null;
 }
@@ -141,17 +224,33 @@ async function handleSearch(url) {
   if (!q) return json({ error: "missing q" }, 400);
   const limit = Math.min(parseInt(url.searchParams.get("n") || "20", 10) || 20, 30);
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
-  const skip = (page - 1) * limit;
+  const STEP = 10;                       // 每个源每页前进 10 条（与各源自身分页粒度对齐）
+  const skip = (page - 1) * STEP;
+  const cjk = hasCJK(q);
+  const Q2 = encodeURIComponent(q);
 
-  const bingRssUrl = "https://www.bing.com/search?q=" + encodeURIComponent(q) + "&format=rss&count=20" + (page > 1 ? "&first=" + (skip + 1) : "");
-  const baiduUrl = "https://www.baidu.com/s?wd=" + encodeURIComponent(q) + "&rn=20" + (page > 1 ? "&pn=" + skip : "");
-  const bingHtmlUrl = "https://www.bing.com/search?q=" + encodeURIComponent(q) + "&setlang=zh-CN" + (page > 1 ? "&first=" + (skip + 1) : "");
+  const mk = function (name, target, ms, parser) {
+    return {
+      name: name,
+      run: function () {
+        return timedFetch(target, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" } }, ms)
+          .then(function (r) { return r.text(); })
+          .then(parser);
+      }
+    };
+  };
 
-  const steps = [
-    { name: "bing-rss", run: function () { return timedFetch(bingRssUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" } }, 8000).then(function (r) { return r.text(); }).then(parseBingRSS); } },
-    { name: "baidu", run: function () { return timedFetch(baiduUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBaidu); } },
-    { name: "bing-html", run: function () { return timedFetch(bingHtmlUrl, { headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" } }, 9000).then(function (r) { return r.text(); }).then(parseBingHTML); } }
-  ];
+  const steps = [];
+  if (cjk) {
+    // 中文：Bing 从数据中心 IP 拿到的中文结果经常是无关/垃圾内容，直接不用
+    steps.push(mk("baidu-m", "https://m.baidu.com/s?word=" + Q2 + "&pn=" + skip, 6500, parseMbaidu));
+    steps.push(mk("duckduckgo", "https://html.duckduckgo.com/html/?q=" + Q2 + (skip > 0 ? "&s=" + skip : ""), 6000, parseDDG));
+  } else {
+    if (page === 1) steps.push(mk("bing-rss", "https://www.bing.com/search?q=" + Q2 + "&format=rss&count=20", 8000, parseBingRSS));
+    steps.push(mk("bing-html", "https://www.bing.com/search?q=" + Q2 + "&setlang=zh-CN" + (skip > 0 ? "&first=" + (skip + 1) : ""), 9000, parseBingHTML));
+    steps.push(mk("duckduckgo", "https://html.duckduckgo.com/html/?q=" + Q2 + (skip > 0 ? "&s=" + skip : ""), 6000, parseDDG));
+    steps.push(mk("baidu-m", "https://m.baidu.com/s?word=" + Q2 + "&pn=" + skip, 6500, parseMbaidu));
+  }
 
   const merged = [], seenHost = {}, tried = [];
   for (let i = 0; i < steps.length; i++) {
@@ -244,7 +343,7 @@ async function handleBrowse(url) {
   html = html.replace(/top\s*!==?\s*self/g, "false");
   html = html.replace(/window\s*\.\s*top\s*!==?\s*window\s*\.\s*self/g, "false");
 
-  const ATTRQ=String.fromCharCode(38)+"quot;";
+  const ATTRQ = String.fromCharCode(38) + "quot;";
   const baseTag = '<base href="' + target.split(String.fromCharCode(34)).join(ATTRQ) + '">';
   if (/<head[^>]*>/i.test(html)) html = html.replace(/<head[^>]*>/i, function (m) { return m + baseTag; });
   else if (/<html[^>]*>/i.test(html)) html = html.replace(/<html[^>]*>/i, function (m) { return m + "<head>" + baseTag + "</head>"; });
@@ -310,7 +409,7 @@ async function handleRead(url) {
   }
 
   const text = lines.join("\n\n");
-  const esc = function (s) { return String(s).replace(/&/g, String.fromCharCode(38)+"amp;").replace(/</g, String.fromCharCode(38)+"lt;").replace(/>/g, String.fromCharCode(38)+"gt;").replace(new RegExp(String.fromCharCode(34), "g"), String.fromCharCode(38)+"quot;"); };
+  const esc = function (s) { return String(s).replace(/&/g, String.fromCharCode(38) + "amp;").replace(/</g, String.fromCharCode(38) + "lt;").replace(/>/g, String.fromCharCode(38) + "gt;").replace(new RegExp(String.fromCharCode(34), "g"), String.fromCharCode(38) + "quot;"); };
   const page2 = '<!doctype html><html lang="zh"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + esc(decodeEntities(title) || target) + '</title>' +
