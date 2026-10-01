@@ -151,7 +151,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .se-bar button:disabled{opacity:.5}
 .se-body{display:flex;gap:16px;flex:1;min-height:0}
 .se-results{width:300px;flex-shrink:0;overflow-y:auto;padding-right:4px;position:relative}
-.se-item{padding:12px;border-radius:var(--radius);cursor:pointer;transition:background .15s;margin-bottom:8px;background:var(--card)}
+.se-item{position:relative;padding:12px;padding-right:36px;border-radius:var(--radius);cursor:pointer;transition:background .15s;margin-bottom:8px;background:var(--card)}
 .se-item:hover{background:var(--accent-bg)}
 .se-item.active{background:var(--accent-bg);outline:2px solid var(--accent)}
 .se-item-title{font-size:.92rem;font-weight:600;margin-bottom:4px;word-break:break-word;line-height:1.4}
@@ -176,6 +176,38 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .se-frame-wrap iframe{width:100%;height:100%;border:none}
 .se-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--fg2);font-size:.9rem;position:absolute;inset:0}
 .se-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg2);font-size:.9rem;z-index:1}
+/* ===== 引擎收藏夹 / 最近访问 ===== */
+.se-fav-btn{position:absolute;top:8px;right:8px;border:none;background:transparent;color:var(--fg2);font-size:.95rem;cursor:pointer;padding:2px 6px;border-radius:6px;line-height:1;font-family:inherit;z-index:2}
+.se-fav-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.se-fav-btn.tmp{color:var(--accent)}
+.se-fav-btn.perm{color:#e6a700}
+.engf-overlay{position:fixed;inset:0;z-index:520}
+.engf-mask{position:absolute;inset:0;background:rgba(0,0,0,.25)}
+.engf-drawer{position:absolute;top:0;right:0;bottom:0;width:min(430px,92vw);background:var(--bg);border-left:1px solid var(--border);display:flex;flex-direction:column;box-shadow:-8px 0 28px rgba(0,0,0,.14);animation:engfIn .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes engfIn{from{transform:translateX(28px);opacity:.6}to{transform:translateX(0);opacity:1}}
+.engf-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.engf-tabs{display:flex;gap:6px;flex:1}
+.engf-tab{padding:8px 14px;border:1px solid var(--border);border-radius:20px;background:var(--card);color:var(--fg2);font-size:.85rem;cursor:pointer;font-family:inherit;transition:all .15s}
+.engf-tab:hover{border-color:var(--accent);color:var(--accent)}
+.engf-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.engf-close{width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg);cursor:pointer;font-size:.9rem;font-family:inherit;flex-shrink:0}
+.engf-close:hover{border-color:var(--accent);color:var(--accent)}
+.engf-body{flex:1;overflow-y:auto;padding:12px 14px}
+.engf-sec{font-size:.78rem;font-weight:700;color:var(--fg2);margin:14px 0 8px;letter-spacing:.04em}
+.engf-sec:first-child{margin-top:2px}
+.engf-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:background .15s}
+.engf-item:hover{background:var(--accent-bg)}
+.engf-item-info{flex:1;min-width:0}
+.engf-item-title{font-size:.9rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.engf-item-url{font-size:.74rem;color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.engf-item-acts{display:flex;gap:2px;flex-shrink:0;align-items:center}
+.engf-item-acts button{border:none;background:transparent;color:var(--fg2);font-size:.75rem;padding:5px 7px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.engf-item-acts button:hover{color:var(--accent);background:var(--accent-bg)}
+.engf-item-acts button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
+.engf-perm-mark{color:#e6a700;font-size:.78rem;flex-shrink:0;white-space:nowrap}
+.engf-empty{color:var(--fg2);font-size:.85rem;text-align:center;padding:26px 10px}
+.engf-clear{width:100%;padding:10px;margin-top:12px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--fg2);font-size:.82rem;cursor:pointer;font-family:inherit}
+.engf-clear:hover{border-color:var(--danger);color:var(--danger)}
 @media(max-width:768px){.se-body{flex-direction:column}.se-results{width:100%;max-height:200px}.se-preview{flex:1}}
 @media(max-width:480px){.main-content{padding:72px 12px 24px}.link-actions{flex-direction:column;gap:2px}.auth-options{flex-direction:column}}
 .font-size-control{display:flex;align-items:center;gap:8px}
@@ -340,6 +372,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       <div class="se-bar">
         <input type="text" id="engineInput" placeholder="输入关键词搜索全网...">
         <button id="engineBtn">🔍 搜索</button>
+        <button id="engineFavBtn" title="收藏夹 / 最近访问">📁 收藏夹</button>
       </div>
       <div class="se-body">
         <div class="se-results" id="engineResults"><div class="se-empty">输入关键词开始搜索</div></div>
@@ -348,6 +381,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
             <button id="engineBackBtn" disabled>← 后退</button>
             <input type="text" class="se-url-display" id="engineUrlInput" placeholder="粘贴网址或输入关键词，回车打开" autocomplete="off" spellcheck="false" value="">
             <button id="engineOpenBtn">↗ 新标签</button>
+            <button id="engineFavCurBtn" title="收藏当前预览的网站">☆ 收藏</button>
             <button id="engineReadBtn">🔁 自动</button>
             <button id="engineFsBtn">⛶ 全屏</button>
           </div>
@@ -431,6 +465,21 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 </div><!-- /main-content -->
 
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastBtn">撤销</button></div>
+
+<!-- 引擎收藏夹 / 最近访问 抽屉 -->
+<div class="engf-overlay" id="engFavOverlay" style="display:none;">
+  <div class="engf-mask" data-act="engfclose"></div>
+  <div class="engf-drawer">
+    <div class="engf-head">
+      <div class="engf-tabs">
+        <button class="engf-tab" data-act="engftab" data-id="fav">⭐ 收藏夹</button>
+        <button class="engf-tab" data-act="engftab" data-id="hist">🕘 最近访问</button>
+      </div>
+      <button class="engf-close" data-act="engfclose" title="关闭">✕</button>
+    </div>
+    <div class="engf-body" id="engFavBody"></div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -1023,26 +1072,31 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(results.length===0){c.innerHTML='<div class="se-empty">没有找到结果</div>';return;}
     var h="";
     results.forEach(function(r){
-      h+='<div class="se-item" data-act="browsesite" data-url="'+esc(r.url)+'">';
+      engUrlTitleMap[r.url]=r.title||"";
+      var fv=engFavState(r.url);
+      h+='<div class="se-item" data-act="browsesite" data-url="'+esc(r.url)+'" data-title="'+esc(r.title||"")+'">';
+      h+='<button class="se-fav-btn'+(fv==="perm"?" perm":fv==="tmp"?" tmp":"")+'" data-act="engfav" data-url="'+esc(r.url)+'" data-title="'+esc(r.title||"")+'" title="收藏到引擎收藏夹">'+(fv?"★":"☆")+'</button>';
       h+='<div class="se-item-title">'+esc(r.title)+'</div>';
       h+='<div class="se-item-url">'+esc(r.displayUrl||getDomain(r.url))+'</div>';
       if(r.snippet) h+='<div class="se-item-snip">'+esc(r.snippet)+'</div>';
       h+='</div>';
     });
     c.innerHTML=h;
-    if(results.length>0) browseSite(results[0].url);
+    if(results.length>0) browseSite(results[0].url,results[0].title);
   }
-  function browseSite(url){
+  function browseSite(url,title){
     if(!url) return;
     engineTempRead=false;
     engineHistory=engineHistory.slice(0,engineHistIdx+1);
     engineHistory.push(url); engineHistIdx=engineHistory.length-1;
+    engPushHist(url,title||engTitleOf(url));
     document.querySelectorAll(".se-item").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-url")===url);});
     updateEngineFrame();
   }
   function setUrlBox(v){ var i=$("engineUrlInput"); if(i){ i.value=v; } var s=$("engineUrlDisplay"); if(s){ s.textContent=v; } }
   function updateEngineFrame(){
     var wrap=$("engineFrameWrap");
+    engUpdateFavBtn();
     if(engineHistIdx<0||!engineHistory[engineHistIdx]){
       wrap.innerHTML='<div class="se-empty">选择搜索结果预览网页</div>';
       setUrlBox("未加载");
@@ -1091,6 +1145,158 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   function engineApplyModeLabel(){ var rb=$("engineReadBtn"); if(rb) rb.textContent=ENGINE_MODE_LABEL[enginePreviewMode]||"🔁 自动"; }
   function engineToggleMode(){ var i=ENGINE_MODE_SEQ.indexOf(enginePreviewMode); if(i<0) i=0; enginePreviewMode=ENGINE_MODE_SEQ[(i+1)%ENGINE_MODE_SEQ.length]; try{ safeLS("setItem","engine_preview_mode",enginePreviewMode); }catch(e){} engineTempRead=(enginePreviewMode==="read"); showToast(ENGINE_MODE_TIP[enginePreviewMode]||"",null,null); engineApplyModeLabel(); if(engineHistIdx>=0) updateEngineFrame(); }
   function engineOpen(){if(engineHistIdx>=0&&engineHistory[engineHistIdx]) window.open(engineHistory[engineHistIdx],"_blank");}
+
+  // ====== 引擎收藏夹 / 最近访问（本地数据层）======
+  var ENG_FAV_KEY="engine_favs",ENG_HIST_KEY="engine_history",ENG_HIST_MAX=10;
+  var engFavTab=safeLS('getItem','engine_fav_tab')||"fav";
+  var engUrlTitleMap={};
+  function engLoadFavs(){try{var a=JSON.parse(safeLS('getItem',ENG_FAV_KEY)||"[]");return Array.isArray(a)?a:[];}catch(e){return[];}}
+  function engSaveFavs(a){try{safeLS('setItem',ENG_FAV_KEY,JSON.stringify(a||[]));}catch(e){}}
+  function engLoadHist(){try{var a=JSON.parse(safeLS('getItem',ENG_HIST_KEY)||"[]");return Array.isArray(a)?a:[];}catch(e){return[];}}
+  function engSaveHist(a){try{safeLS('setItem',ENG_HIST_KEY,JSON.stringify((a||[]).slice(0,ENG_HIST_MAX)));}catch(e){}}
+  function engNormUrl(u){
+    try{
+      var x=new URL(String(u));var host=x.hostname.replace(/^www\./,"").toLowerCase();
+      var path=x.pathname.replace(/\/+$/,"");
+      var q=x.search.replace(/^\?/,"").split("&").filter(function(s){return s&&!/^(utm_|gclid|fbclid|spm|ref)/i.test(s);}).join("&");
+      return host+path+(q?"?"+q:"");
+    }catch(e){return String(u||"").replace(/\/+$/,"").toLowerCase();}
+  }
+  function engSameUrl(a,b){return engNormUrl(a)===engNormUrl(b);}
+  function engFindPerm(url){for(var i=0;i<S.links.length;i++){if(engSameUrl(S.links[i].url,url))return S.links[i];}return null;}
+  function engFavState(url){
+    if(!url) return "";
+    if(engFindPerm(url)) return "perm";
+    var favs=engLoadFavs();
+    for(var i=0;i<favs.length;i++){if(engSameUrl(favs[i].url,url))return "tmp";}
+    return "";
+  }
+  function engTitleOf(url){
+    if(engUrlTitleMap[url]) return engUrlTitleMap[url];
+    var ks=Object.keys(engUrlTitleMap);
+    for(var i=0;i<ks.length;i++){if(engSameUrl(ks[i],url))return engUrlTitleMap[ks[i]];}
+    return getDomain(url);
+  }
+  function engAddFav(url,title){
+    if(!url) return;
+    if(engFindPerm(url)){showToast("该网站已在主站收藏中",null,null);return;}
+    var favs=engLoadFavs();
+    for(var i=0;i<favs.length;i++){if(engSameUrl(favs[i].url,url)){showToast("已在引擎收藏夹中（可在收藏夹里永久收藏）",null,null);return;}}
+    favs.unshift({url:url,title:title||engTitleOf(url),added:new Date().toISOString()});
+    engSaveFavs(favs);
+    showToast("已加入引擎收藏夹，点「📁收藏夹」可永久收藏",null,null);
+    engRefreshStars();engUpdateFavBtn();engRefreshPanel();
+  }
+  function engDelFav(url){
+    var favs=engLoadFavs().filter(function(f){return !engSameUrl(f.url,url);});
+    engSaveFavs(favs);engRefreshStars();engUpdateFavBtn();engRefreshPanel();
+  }
+  function engPromoteFav(url){
+    if(!url) return;
+    if(engFindPerm(url)){showToast("该网站已在主站收藏中",null,null);return;}
+    if(!canEdit()){showToast("请管理员登录后再永久收藏",null,null);return;}
+    var favs=engLoadFavs(),title="";
+    for(var i=0;i<favs.length;i++){if(engSameUrl(favs[i].url,url)){title=favs[i].title||"";break;}}
+    if(!title) title=engTitleOf(url);
+    var defCat=(S.categories[0]&&S.categories[0].id)||"default";
+    S.links.unshift({id:gid(),url:url,title:title||url,categoryId:defCat,note:"",pinned:false,added:new Date().toISOString()});
+    saveData().then(function(){renderAll();});
+    showToast("已永久收藏到主站 ✔",null,null);
+    engRefreshStars();engUpdateFavBtn();engRefreshPanel();
+  }
+  function engPushHist(url,title){
+    if(!url||!/^https?:/i.test(url)) return;
+    var hist=engLoadHist();
+    hist=hist.filter(function(x){return !engSameUrl(x.url,url);});
+    hist.unshift({url:url,title:title||"",ts:Date.now()});
+    if(hist.length>ENG_HIST_MAX) hist=hist.slice(0,ENG_HIST_MAX);
+    engSaveHist(hist);
+    engRefreshPanel();
+  }
+  function engDelHist(url){engSaveHist(engLoadHist().filter(function(x){return !engSameUrl(x.url,url);}));engRefreshPanel();}
+  function engClearHist(){engSaveHist([]);engRefreshPanel();showToast("已清空最近访问",null,null);}
+  function engRefreshStars(){
+    var items=document.querySelectorAll(".se-item");
+    for(var i=0;i<items.length;i++){
+      var u=items[i].getAttribute("data-url"),b=items[i].querySelector(".se-fav-btn");
+      if(!b) continue;
+      var st=engFavState(u);
+      b.textContent=st?"★":"☆";
+      b.className="se-fav-btn"+(st==="perm"?" perm":st==="tmp"?" tmp":"");
+    }
+  }
+  function engUpdateFavBtn(){
+    var b=$("engineFavCurBtn");if(!b) return;
+    var u=(engineHistIdx>=0&&engineHistory[engineHistIdx])||"";
+    if(!u){b.textContent="☆ 收藏";b.disabled=true;return;}
+    b.disabled=false;
+    var st=engFavState(u);
+    b.textContent=st==="perm"?"★ 已永久":st==="tmp"?"★ 已收藏":"☆ 收藏";
+  }
+  function engFavCurrent(){
+    if(engineHistIdx<0||!engineHistory[engineHistIdx]){showToast("先打开一个网页再收藏",null,null);return;}
+    var u=engineHistory[engineHistIdx];
+    engAddFav(u,engTitleOf(u));
+  }
+  function engTogglePanel(force){
+    var ov=$("engFavOverlay");if(!ov) return;
+    var show=(force===undefined)?(ov.style.display==="none"):!!force;
+    ov.style.display=show?"block":"none";
+    if(show) engRenderFavPanel();
+  }
+  function engRefreshPanel(){
+    var ov=$("engFavOverlay");
+    if(ov&&ov.style.display!=="none") engRenderFavBody();
+  }
+  function engRenderFavPanel(){
+    var ov=$("engFavOverlay");if(!ov) return;
+    var tabs=ov.querySelectorAll("[data-act='engftab']");
+    for(var i=0;i<tabs.length;i++){tabs[i].classList.toggle("active",tabs[i].getAttribute("data-id")===engFavTab);}
+    engRenderFavBody();
+  }
+  function engRenderFavBody(){
+    var body=$("engFavBody");if(!body) return;
+    body.innerHTML=(engFavTab==="hist")?engHistHTML():engFavHTML();
+  }
+  function engFavHTML(){
+    var h="";
+    var permLinks=S.links.slice().sort(function(a,b){return (b.pinned?1:0)-(a.pinned?1:0)||(new Date(b.added||0)-new Date(a.added||0));});
+    h+='<div class="engf-sec">🔒 主站永久收藏（'+permLinks.length+'）</div>';
+    if(permLinks.length===0) h+='<div class="engf-empty">主站还没有收藏的网站</div>';
+    else permLinks.forEach(function(l){
+      h+='<div class="engf-item" data-act="engopen" data-url="'+esc(l.url)+'" data-title="'+esc(l.title||"")+'">';
+      h+='<div class="engf-item-info"><div class="engf-item-title">'+esc(l.title||l.url)+'</div><div class="engf-item-url">'+esc(getDomain(l.url))+'</div></div>';
+      h+='<div class="engf-item-acts"><span class="engf-perm-mark">🔒</span><button data-act="engpermgo" title="到主站管理">主站</button></div>';
+      h+='</div>';
+    });
+    var favs=engLoadFavs();
+    h+='<div class="engf-sec">📌 引擎临时收藏（'+favs.length+'）</div>';
+    if(favs.length===0) h+='<div class="engf-empty">还没有临时收藏，搜索后点结果右上角 ☆ 即可收藏</div>';
+    else favs.forEach(function(f){
+      var isPerm=!!engFindPerm(f.url);
+      h+='<div class="engf-item" data-act="engopen" data-url="'+esc(f.url)+'" data-title="'+esc(f.title||"")+'">';
+      h+='<div class="engf-item-info"><div class="engf-item-title">'+esc(f.title||f.url)+'</div><div class="engf-item-url">'+esc(getDomain(f.url))+'</div></div>';
+      h+='<div class="engf-item-acts">';
+      if(isPerm) h+='<span class="engf-perm-mark">✓ 已永久</span>';
+      else h+='<button data-act="engpromote" data-url="'+esc(f.url)+'" title="永久收藏到主站">⭐ 永久收藏</button>';
+      h+='<button class="danger" data-act="engdelfav" data-url="'+esc(f.url)+'">移出</button>';
+      h+='</div></div>';
+    });
+    return h;
+  }
+  function engHistHTML(){
+    var hist=engLoadHist();
+    var h='<div class="engf-sec">🕘 最近访问（仅保留最近 '+ENG_HIST_MAX+' 次）</div>';
+    if(hist.length===0){h+='<div class="engf-empty">还没有访问记录</div>';return h;}
+    hist.forEach(function(x){
+      h+='<div class="engf-item" data-act="engopen" data-url="'+esc(x.url)+'" data-title="'+esc(x.title||"")+'">';
+      h+='<div class="engf-item-info"><div class="engf-item-title">'+esc(x.title||x.url)+'</div><div class="engf-item-url">'+esc(getDomain(x.url))+'</div></div>';
+      h+='<div class="engf-item-acts"><button class="danger" data-act="enghdel" data-url="'+esc(x.url)+'">移除</button></div>';
+      h+='</div>';
+    });
+    h+='<button class="engf-clear" data-act="enghclear">🗑 清空历史</button>';
+    return h;
+  }
 
   // ====== 后门函数 ======
   function triggerBackdoor() {
@@ -2457,7 +2663,16 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     else if(act==="delcat") deleteCategory(id);
     else if(act==="switchtheme") switchTheme(id);
     else if(act==="deltheme") deleteCustomTheme(id);
-    else if(act==="browsesite") browseSite(durl);
+    else if(act==="browsesite") browseSite(durl, el.getAttribute("data-title")||"");
+    else if(act==="engfav") engAddFav(durl, el.getAttribute("data-title")||"");
+    else if(act==="engopen") browseSite(durl, el.getAttribute("data-title")||"");
+    else if(act==="engftab"){engFavTab=(id==="hist")?"hist":"fav"; safeLS('setItem','engine_fav_tab',engFavTab); engRenderFavPanel();}
+    else if(act==="engfclose") engTogglePanel(false);
+    else if(act==="engpromote") engPromoteFav(durl);
+    else if(act==="engdelfav") engDelFav(durl);
+    else if(act==="enghdel") engDelHist(durl);
+    else if(act==="enghclear") engClearHist();
+    else if(act==="engpermgo"){engTogglePanel(false); switchPanel("panel-links");}
   });
   var sni=$("siteNameInput");
   if(sni){
@@ -2486,6 +2701,8 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   $("searchInput").oninput=function(){handleSearch(this.value);};
   $("engineBtn").onclick=doEngineSearch;
   $("engineInput").onkeypress=function(e){if(e.key==="Enter")doEngineSearch();};
+  var efb=$("engineFavBtn"); if(efb) efb.onclick=function(){engTogglePanel();};
+  var efc=$("engineFavCurBtn"); if(efc) efc.onclick=engFavCurrent;
   $("engineBackBtn").onclick=engineBack;
   $("engineOpenBtn").onclick=engineOpen;
   $("engineReadBtn").onclick=engineToggleMode;
@@ -2512,8 +2729,10 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(engineHistory[engineHistIdx]!==nu){
       engineHistory=engineHistory.slice(0,engineHistIdx+1);
       engineHistory.push(nu); engineHistIdx=engineHistory.length-1;
+      engPushHist(nu,engTitleOf(nu));
     }
     setUrlBox(nu+(enginePreviewMode==="read"?"（阅读模式）":""));
+    engUpdateFavBtn();
     var bb=$("engineBackBtn"); if(bb) bb.disabled=(engineHistIdx<=0);
     var items=document.querySelectorAll(".se-item");
     for(var i=0;i<items.length;i++){ items[i].classList.toggle("active", items[i].getAttribute("data-url")===nu); }
@@ -2538,6 +2757,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   // ====== 初始化 ======
   var sp=safeLS('getItem','active_panel'); if(sp) S.activePanel=sp;
   applyThemeStyle();applyFontSize();
+  engUpdateFavBtn();
   vaultInit();
   memoInit();
   checkAuthStatus();
