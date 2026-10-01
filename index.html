@@ -566,6 +566,8 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   var GLITCH_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()_+[]{}<>?/\\|~`!·¥€£§¶°±×÷";
   var glitchTimer = null;
   var glitchOriginal = [];
+  var glitchInterval = 120;
+  var glitchCtrlEl = null;
   function glitchRandomChar(){ return GLITCH_CHARS.charAt(Math.floor(Math.random()*GLITCH_CHARS.length)); }
   function isGlitchTextNode(n){
     if(!n || n.nodeType!==3) return false;
@@ -573,6 +575,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(!t.trim()) return false;
     var p=n.parentNode;
     if(!p) return false;
+    if(p.closest&&p.closest('#glitch-ctrl')) return false;
     // 跳过 style/script/textarea/input 的实际内容（这些是功能组件）
     if(p.nodeName==='STYLE'||p.nodeName==='SCRIPT'||p.nodeName==='TEXTAREA') return false;
     return true;
@@ -603,14 +606,58 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       item.node.nodeValue=out;
     }
   }
+  function createGlitchControls(){
+    if(glitchCtrlEl) return;
+    var d=document.createElement('div');
+    d.id='glitch-ctrl';
+    d.style.cssText='position:fixed;right:12px;bottom:80px;z-index:9999;background:rgba(20,20,20,.94);border:1px solid #ff4444;border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.6);font-family:monospace;';
+    var btn=document.createElement('button');
+    btn.id='glitch-speed-btn';
+    btn.textContent='⚡ 速度';
+    btn.style.cssText='background:#ff4444;color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;';
+    var panel=document.createElement('div');
+    panel.id='glitch-speed-panel';
+    panel.style.cssText='display:none;flex-direction:column;gap:4px;';
+    var label=document.createElement('div');
+    label.id='glitch-speed-label';
+    label.style.cssText='color:#e8e8e8;font-size:12px;white-space:nowrap;';
+    label.textContent='速度: '+glitchInterval+'ms';
+    var slider=document.createElement('input');
+    slider.type='range';
+    slider.id='glitch-speed-slider';
+    slider.min='30';
+    slider.max='500';
+    slider.step='10';
+    slider.value=String(glitchInterval);
+    slider.style.cssText='width:120px;accent-color:#ff4444;cursor:pointer;';
+    panel.appendChild(label);
+    panel.appendChild(slider);
+    d.appendChild(btn);
+    d.appendChild(panel);
+    document.body.appendChild(d);
+    glitchCtrlEl=d;
+    btn.onclick=function(e){
+      e.stopPropagation();
+      var show=panel.style.display==='none';
+      panel.style.display=show?'flex':'none';
+    };
+    slider.oninput=function(){
+      glitchInterval=parseInt(slider.value,10)||120;
+      label.textContent='速度: '+glitchInterval+'ms';
+      if(glitchTimer){ clearInterval(glitchTimer); glitchTimer=setInterval(glitchTick,glitchInterval); }
+    };
+    btn.addEventListener('touchstart',function(e){ e.stopPropagation(); },{passive:false});
+  }
   function startGlitch(){
     if(glitchTimer) return;
+    createGlitchControls();
     collectGlitchText();
     glitchTick();
-    glitchTimer=setInterval(glitchTick,120);
+    glitchTimer=setInterval(glitchTick,glitchInterval);
   }
   function stopGlitch(){
     if(glitchTimer){ clearInterval(glitchTimer); glitchTimer=null; }
+    if(glitchCtrlEl){ glitchCtrlEl.remove(); glitchCtrlEl=null; }
     for(var i=0;i<glitchOriginal.length;i++){
       var item=glitchOriginal[i];
       if(item&&item.node&&item.node.nodeValue!==null) item.node.nodeValue=item.text;
