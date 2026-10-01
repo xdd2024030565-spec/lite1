@@ -581,12 +581,21 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     return true;
   }
   function collectGlitchText(){
-    glitchOriginal=[];
+    // 剔除已脱离文档的节点，避免残留
+    glitchOriginal=glitchOriginal.filter(function(it){return it&&it.node&&it.node.isConnected!==false;});
+    // 遍历当前全部文本节点，把新渲染的节点增量加入（已存在的保留原始文本）
     var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){return isGlitchTextNode(n)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
     var n;
-    while(n=walker.nextNode()) glitchOriginal.push({node:n,text:n.nodeValue});
+    while(n=walker.nextNode()){
+      var exists=false;
+      for(var i=0;i<glitchOriginal.length;i++){
+        if(glitchOriginal[i].node===n){ exists=true; break; }
+      }
+      if(!exists) glitchOriginal.push({node:n,text:n.nodeValue});
+    }
   }
   function glitchTick(){
+    collectGlitchText();
     if(!glitchOriginal.length) return;
     var len=glitchOriginal.length;
     // 只更新一部分，制造闪烁感又不至于全屏闪烁过快
