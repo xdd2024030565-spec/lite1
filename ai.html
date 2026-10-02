@@ -202,7 +202,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 <div class="toast" id="toast"></div>
 <script>
 // ===== 存储 =====
-const LS_KEYS={providers:'ai.providers',active:'ai.activeProvider',sessions:'ai.sessions',activeSession:'ai.activeSession',mcp:'ai.mcpServers',plugins:'ai.plugins',builtin:'ai.builtinTools',settings:'ai.settings'};
+const LS_KEYS={providers:'ai.providers',active:'ai.activeProvider',sessions:'ai.sessions',activeSession:'ai.activeSession',mcp:'ai.mcpServers',plugins:'ai.plugins',builtin:'ai.builtinTools',settings:'ai.settings',activeModel:'ai.activeModel'};
 function load(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):(f!==undefined?f:null)}catch(e){return f!==undefined?f:null}}
 function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -231,10 +231,11 @@ let plugins=load(LS_KEYS.plugins,[]);
 let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
 let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048});
 let currentProvider=null;
+let selectedModel=load(LS_KEYS.activeModel,null);
 function getProvider(id){return providers.find(p=>p.id===id)}
 function activeProvider(){return getProvider(activeProviderId)||providers[0]}
 function curSession(){return sessions.find(s=>s.id===activeSessionId)||null}
-function persist(){save(LS_KEYS.providers,providers);save(LS_KEYS.active,activeProviderId);save(LS_KEYS.sessions,sessions);save(LS_KEYS.activeSession,activeSessionId);save(LS_KEYS.mcp,mcpServers);save(LS_KEYS.plugins,plugins);save(LS_KEYS.builtin,builtinTools);save(LS_KEYS.settings,settings)}
+function persist(){save(LS_KEYS.providers,providers);save(LS_KEYS.active,activeProviderId);save(LS_KEYS.sessions,sessions);save(LS_KEYS.activeSession,activeSessionId);save(LS_KEYS.mcp,mcpServers);save(LS_KEYS.plugins,plugins);save(LS_KEYS.builtin,builtinTools);save(LS_KEYS.settings,settings);save(LS_KEYS.activeModel,selectedModel)}
 // ===== 提供商 UI =====
 function renderProviders(){
   const el=$('providerList');const ap=activeProvider();
@@ -246,10 +247,11 @@ function renderProviders(){
   const ms=$('modelSel');
   const opts=[];
   providers.forEach(p=>{const cur=ap.id===p.id;
-    (p.models||[]).forEach(m=>opts.push('<option value="'+esc(m)+'" data-pid="'+esc(p.id)+'"'+(cur?' selected':'')+'>'+esc(p.name)+' · '+esc(m)+'</option>'));
+    (p.models||[]).forEach(m=>{const selM=(cur&&m===selectedModel)||(cur&&!selectedModel&&m===(p.models||[])[0]);
+      opts.push('<option value="'+esc(m)+'" data-pid="'+esc(p.id)+'"'+(selM?' selected':'')+'>'+esc(p.name)+' · '+esc(m)+'</option>');});
   });
   ms.innerHTML=opts.join('')||'<option value="">请先添加模型</option>';
-  ms.onchange=()=>{const sel=ms.options[ms.selectedIndex];if(sel&&sel.dataset.pid){activeProviderId=sel.dataset.pid;persist();renderAll();}};
+  ms.onchange=()=>{const sel=ms.options[ms.selectedIndex];if(sel&&sel.dataset.pid){activeProviderId=sel.dataset.pid;selectedModel=sel.value;persist();renderAll();}};
 }
 
 function openProviderModal(id){
@@ -492,7 +494,7 @@ async function chatOnce(messages,tools){
   const p=activeProvider();
   if(!p||!p.base){throw new Error('未配置提供商')}
   if(!p.key){throw new Error('未设置 API Key')}
-  const model=$('modelSel').value||(p.models||[])[0];
+  const model=selectedModel||(p.models||[])[0];
   const body={model,messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
   if(tools&&tools.length)body.tools=tools;
   const headers={'Content-Type':'application/json','Authorization':'Bearer '+p.key};
