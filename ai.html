@@ -1232,7 +1232,8 @@ async function chatStreamFull(messages,onDelta,tools){
   const model=selectedModel||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
   if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
-  const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body)});
+  abortCtrl=new AbortController();
+  const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body),signal:abortCtrl.signal});
   if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
   const reader=r.body.getReader();
   const dec=new TextDecoder();
@@ -1262,14 +1263,17 @@ async function chatStreamFull(messages,onDelta,tools){
     }
   };
   while(true){
-    const {done,value}=await reader.read();
-    if(done)break;
-    buf+=dec.decode(value,{stream:true});
+    if(stopFlag){try{await reader.cancel();}catch(e){}break;}
+    let _rd;
+    try{_rd=await reader.read();}catch(e){if(stopFlag)break;throw e;}
+    if(_rd.done)break;
+    buf+=dec.decode(_rd.value,{stream:true});
     const lines=buf.split(String.fromCharCode(10));
     buf=lines.pop()||"";
     for(const ln of lines)handleLine(ln);
   }
   if(buf)handleLine(buf);
+  abortCtrl=null;
   return {content:full,reasoning:reasoning,toolCalls:toolCalls.filter(Boolean)};
 }
 // ===== 错误分类与自动重试 =====
@@ -1307,6 +1311,7 @@ function setStreamNotice(s,text){
 // ===== 对话主循环 =====
 let sending=false;
 let stopFlag=false;
+let abortCtrl=null;
 let lastError="";
 // ===== 上下文管理 =====
 function estimateTokens(text){
@@ -1457,6 +1462,9 @@ async function runCompletion(){
   }catch(e){
     const pm=s.messages.find(m=>m.role==="assistant"&&m._streaming);
     const raw=String((e&&e.message)||e||"未知错误");
+    if(stopFlag){
+      if(pm){pm._streaming=false;pm._notice="";}
+    }else{
     const cfg=/HTTP 401|HTTP 403|未设置 API Key|未配置提供商/.test(raw);
     if(pm){
       // 原地收尾：同一条消息，不新建气泡
@@ -1470,6 +1478,7 @@ async function runCompletion(){
       s.messages.push({role:"assistant",content:cfg?"无法开始本次回复。":"（重试多次仍失败）",_error:true,_errText:cfg?("请求未通过："+raw):("已自动重试 "+maxRetry()+" 次仍未成功："+raw)});
     }
     lastError=raw;
+    }
   }
   sending=false;
   $("sendBtn").disabled=false;$("sendBtn").style.display="";$("stopBtn").style.display="none";
@@ -1525,7 +1534,7 @@ async function continueLast(){
   await runCompletion();
 }
 $('sendBtn').onclick=sendMessage;
-$('stopBtn').onclick=()=>{stopFlag=true;};
+$('stopBtn').onclick=()=>{stopFlag=true;if(abortCtrl){try{abortCtrl.abort();}catch(e){}}toast('已停止生成');};
 $('input').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
 });
