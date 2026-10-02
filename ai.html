@@ -459,14 +459,14 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
   <p class="sub">技能作为行为规范注入系统提示词，不占用工具调用。</p>
   <div class="form-row"><label>名称</label><input id="skName" placeholder="例如：代码审查"></div>
   <div class="form-row"><label>描述</label><input id="skDesc" placeholder="一句话说明用途"></div>
-  <div class="form-row"><label>提示词</label><textarea id="skPrompt" rows="8" placeholder="当用户提供代码时，请按以下结构回答…"></textarea></div>
+  <div class="form-row"><label>提示词</label><textarea id="skPrompt" rows="8" placeholder="当用户提供代��时，请按以下结构回答…"></textarea></div>
   <div class="form-actions"><button class="btn" id="skCancel">取消</button><button class="btn primary" id="skSave">保存</button></div>
 </div></div>
 <div class="modal-mask" id="marketModal"><div class="modal">
   <h2>能力市场</h2>
   <p class="sub" id="mkSub">填入链接或关键词，自动识别格式并安装。</p>
-  <div class="tabs" id="mkTabs"><button type="button" class="on" data-mkt="skill">技能</button><button type="button" data-mkt="mcp">MCP</button><button type="button" data-mkt="plugin">插件</button></div>
-  <div class="tab-pane on" style="padding:14px 16px">
+  <div class="tabs" id="mkTabs" data-no-pane="1"><button type="button" class="on" data-mkt="skill">技能</button><button type="button" data-mkt="mcp">MCP</button><button type="button" data-mkt="plugin">插件</button></div>
+  <div class="tab-pane on" id="mkPane" style="padding:14px 16px">
     <div class="form-row"><label id="mkUrlLabel">来源链接</label><input id="mkUrl" placeholder="https://registry.modelcontextprotocol.io/v0/servers"></div>
     <div class="form-row"><label>快捷来源</label><div class="preset-row" id="mkPresets"></div></div>
     <div class="mk-bar"><button class="btn primary small" id="mkFetch">查询</button><span id="mkStatus" class="hint" style="margin:0"></span></div>
@@ -582,7 +582,7 @@ const DEFAULT_BUILTIN=[
 ];
 const DEFAULT_SKILLS=[
   {id:'sk_code_review',name:'代码审查',desc:'逐条指出问题并给出修复建议',enabled:false,
-   prompt:'当用户提供代码时，请按以下结构回复：'+String.fromCharCode(10)+'1. 总体评价（一句话）'+String.fromCharCode(10)+'2. 问题清单（按严重程度排序，每条含：问题 / 影响 / 修复建议）'+String.fromCharCode(10)+'3. 修复后的完整代码'+String.fromCharCode(10)+'只指出真实存在的问题，不要臆测。'},
+   prompt:'当用户提供代码时，请按以下结构回复：'+String.fromCharCode(10)+'1. 总体评价（一句话）'+String.fromCharCode(10)+'2. 问题清单（按严重程度排序，每条含：问题 / 影响 / 修复建议）'+String.fromCharCode(10)+'3. 修复后的完整代码'+String.fromCharCode(10)+'只指出真实存在的问题，不要���测。'},
   {id:'sk_summary',name:'结构化摘要',desc:'把长文压缩为要点',enabled:false,
    prompt:'当用户要求总结时，按以下结构输出：'+String.fromCharCode(10)+'- 一句话结论'+String.fromCharCode(10)+'- 3-5 条要点（每条不超过 40 字）'+String.fromCharCode(10)+'- 关键数据或事实（如有）'+String.fromCharCode(10)+'不要输出与原文无关的推测。'},
 ];
@@ -1779,7 +1779,7 @@ function isRetriable(msg){
   if(/Failed to fetch|NetworkError|ECONNRESET|ECONNABORTED|network error|socket hang up/i.test(m))return true;
   return false;
 }
-// 退避秒数：2,4,8,16,30
+// 退���秒数：2,4,8,16,30
 function backoffDelay(attempt){
   const seq=[2,4,8,16,30];
   return seq[Math.min(attempt,seq.length-1)];
@@ -1963,7 +1963,7 @@ async function runCompletion(){
       pm._streaming=false;
       pm._notice="";
       pm._error=true;
-      pm._errText=cfg?("请求未通过："+raw):("已自动重试 "+maxRetry()+" 次仍未成功："+raw);
+      pm._errText=cfg?("请求未通过："+raw):("已���动重试 "+maxRetry()+" 次仍未成功："+raw);
       if(!pm.content)pm.content=cfg?"无法继续此条回复。":"（重试多次仍失败）";
     }else{
       // 完全没有产出时才建一条，并直接标错
@@ -1995,7 +1995,7 @@ async function retryThis(){
     const m=st.messages[i];
     if(m.role==="assistant"&&m._error){
       // 有内容就保留重来，没内容则移除
-      if(m.content&&m.content!=="（重试多次仍失败）"&&m.content!=="无法继续此条回复。"&&m.content!=="无法开始本次回复。"){
+      if(m.content&&m.content!=="（重试多次仍失败）"&&m.content!=="无法继续此条回复。"&&m.content!=="无法���始本次回复。"){
         delete m._error;delete m._errText;
         m.content="";
       }else{
@@ -2096,11 +2096,16 @@ $('settingsSave').onclick=()=>{
 
 // ===== 初始化 =====
 document.querySelectorAll('.tabs').forEach(bar=>{
-  bar.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{
-    const modal=bar.closest('.modal');
-    bar.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-    btn.classList.add('on');
-    modal.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('on',p.id===btn.dataset.tab));
+  if(bar.id==='mkTabs'||bar.dataset.noPane==='1')return;
+  bar.querySelectorAll('button').forEach(btn=>{
+    if(!btn.dataset.tab)return;
+    btn.onclick=()=>{
+      const modal=bar.closest('.modal');
+      if(!modal)return;
+      bar.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on');
+      modal.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('on',p.id===btn.dataset.tab));
+    };
   });
 });
 renderAll();
