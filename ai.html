@@ -554,6 +554,26 @@ $('plSave').onclick=async()=>{
 };
 
 // ===== 工具执行 =====
+// 把已启用工具汇总成可读清单，注入系统提示词
+function describeTools(tools){
+  if(!tools||!tools.length)return "";
+  return tools.map(t=>"- "+t.function.name+"："+(t.function.description||"")).join("\n");
+}
+function buildSystemPrompt(userSys,tools){
+  const base=userSys||"你是一个有用的 AI 助手。";
+  if(!tools||!tools.length)return base;
+  const list=describeTools(tools);
+  const head=[
+    "你是一个可以直接调用工具的工作型 AI。",
+    "当问题需要实时信息、外部数据或实际动作时，优先调用下面的工具，而不是回答“我无法访问”。",
+    "工具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。",
+    "你可以分析问题、决定调用哪个工具、根据返回结果继续推理。",
+    "",
+    "你当前可用的工具：",
+    list
+  ].join("\n");
+  return head+"\n\n"+base;
+}
 function collectTools(){
   const tools=[];
   builtinTools.filter(t=>t.enabled).forEach(t=>{
@@ -753,12 +773,13 @@ async function chatOnce(messages,tools){
 }
 
 // ===== 流式请求 (SSE)，支持 content 与 tool_calls =====
-async function chatStreamFull(messages,onDelta){
+async function chatStreamFull(messages,onDelta,tools){
   const p=activeProvider();
   if(!p||!p.base)throw new Error('未配置提供商');
   if(!p.key)throw new Error('未设置 API Key');
   const model=selectedModel||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
+  if(tools&&tools.length){body.tools=tools;body.tool_choice='auto';}
   const headers=buildHeaders(p);
   const r=await fetch(buildUrl(p),{method:'POST',headers:headers,body:JSON.stringify(body)});
   if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
@@ -823,7 +844,8 @@ async function runCompletion(){
   stopFlag=false;
   const p=activeProvider();
   // 只在没有系统消息时插入，避免多次重试重复叠加
-  if(p&&p.sys){s.messages=s.messages.filter(m=>m.role!=="system");s.messages.unshift({role:"system",content:p.sys});}
+  const _tools0=collectTools();
+  {const sp=buildSystemPrompt(p&&p.sys,_tools0);if(sp){s.messages=s.messages.filter(m=>m.role!=="system");s.messages.unshift({role:"system",content:sp});}}
   try{
     const tools=collectTools();
     const msgs=s.messages.filter(m=>m.role!=='system'||m===s.messages[0]);
@@ -846,7 +868,7 @@ async function runCompletion(){
         if(reasoningText)existing.reasoning=reasoningText;
         _streamDirty=true;
         renderStreamThrottled();
-      });
+      },tools);
       s.messages=s.messages.filter(m=>!(m._streaming));
       if(partial.content||partial.reasoning){s.messages.push({role:'assistant',content:partial.content||'',reasoning:partial.reasoning||''});}
       const tcs=partial.toolCalls||[];
