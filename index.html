@@ -533,15 +533,19 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   }
 
   // 健康检查：GET /health 或根路径，3 秒超时
-  function test(url){
+  function test(url, attempt){
+    attempt = attempt || 1;
     return new Promise(function(resolve){
       var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
-      var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); resolve(false); }, 3000);
+      var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); retryOrFail(); }, attempt===1?3000:4000);
       var opts = {method:'GET', cache:'no-store'};
       if(ctrl) opts.signal = ctrl.signal;
+      function retryOrFail(){
+        if(attempt < 2){ test(url, attempt+1).then(resolve); } else { resolve(false); }
+      }
       fetch(url+'/health', opts)
         .then(function(r){ clearTimeout(timer); resolve(r.ok || r.status===404); })
-        .catch(function(){ clearTimeout(timer); resolve(false); });
+        .catch(function(){ clearTimeout(timer); retryOrFail(); });
     });
   }
 
@@ -561,11 +565,15 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       probing[service] = true;
       var results = [];
       pool.forEach(function(url, i){
+        var t0 = Date.now();
         test(url).then(function(ok){
-          results.push({url:url, ok:ok, idx:i});
+          results.push({url:url, ok:ok, idx:i, ms:Date.now()-t0});
           if(results.length===pool.length){
-            var best = results.filter(function(r){return r.ok;}).sort(function(a,b){return a.idx-b.idx;})[0];
-            if(best){ bestCache[service] = {url:best.url, ts:Date.now()}; }
+            var usable = results.filter(function(r){return r.ok;});
+            if(usable.length){
+              usable.sort(function(a,b){ return (a.ms-b.ms) || (a.idx-b.idx); });
+              bestCache[service] = {url:usable[0].url, ts:Date.now()};
+            }
             probing[service] = false;
           }
         });
