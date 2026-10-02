@@ -138,7 +138,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     <h2 id="providerModalTitle">添加提供商</h2>
     <div class="form-row"><label>常用模板（可一键填入）</label><select id="pTemplate"><option value="">自定义</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic(OpenAI兼容)</option><option value="google">Google Gemini</option><option value="qwen">通义千问</option><option value="moonshot">Kimi</option><option value="zhipu">智谱</option><option value="doubao">豆包</option><option value="ollama">Ollama(本地)</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option></select></div>
     <div class="form-row"><label>名称</label><input id="pName" placeholder="例如：商汤日日新"></div>
-    <div class="form-row"><label>API 地址 (baseURL)</label><input id="pBase" placeholder="https://api.sensenova.cn/v1">
+    <div class="form-row"><label>API 地址 (baseURL)</label><input id="pBase" placeholder="https://token.sensenova.cn/v1">
       <div class="hint">OpenAI 兼容地址，程序自动拼接 /chat/completions。直连被 CORS 拦截时可留代理。</div></div>
     <div class="form-row"><label>API Key</label><input id="pKey" type="password" placeholder="sk-..."></div>
     <div class="form-row"><label>代理地址 (可选，解决 CORS)</label><input id="pProxy" placeholder="例如 https://ai.yongjiu.ccwu.cc 或留空直连">
@@ -226,7 +226,7 @@ let toastTimer=null;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
 // ===== 默认数据 =====
 const DEFAULT_PROVIDERS=[
-  {id:'sensenova',name:'商汤日日新',base:'https://api.sensenova.cn/v1',key:'',proxy:'',models:['SenseChat-5','SenseChat-Turbo'],sys:'你是一个有用的 AI 助手'},
+  {id:'sensenova',name:'商汤日日新',base:'https://token.sensenova.cn/v1',key:'',proxy:'',models:['SenseChat-5','SenseChat-Turbo'],sys:'你是一个有用的 AI 助手'},
   {id:'deepseek',name:'DeepSeek',base:'https://api.deepseek.com/v1',key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手'},
 ];
 const DEFAULT_BUILTIN=[
@@ -237,6 +237,9 @@ const DEFAULT_BUILTIN=[
 
 // ===== 状态 =====
 let providers=load(LS_KEYS.providers,DEFAULT_PROVIDERS);
+// 迁移：旧版商汤域名 api.sensenova.cn -> token.sensenova.cn
+providers.forEach(p=>{if(p.base&&p.base.indexOf('api.sensenova.cn')>=0){p.base=p.base.replace("api.sensenova.cn","token.sensenova.cn");}});
+save(LS_KEYS.providers,providers);
 let activeProviderId=load(LS_KEYS.active,providers[0]?providers[0].id:null);
 let sessions=load(LS_KEYS.sessions,[]);
 let activeSessionId=load(LS_KEYS.activeSession,null);
@@ -291,7 +294,7 @@ function openProviderModal(id){
   const p=id?getProvider(id):null;
   $('providerModalTitle').textContent=p?'编辑提供商':'添加提供商';
   $('pTemplate').value='';$('pName').value=p?p.name:'';
-  $('pBase').value=p?p.base:'https://api.sensenova.cn/v1';
+  $('pBase').value=p?p.base:'https://token.sensenova.cn/v1';
   $('pKey').value=p?p.key:'';
   $('pProxy').value=p?p.proxy||'':'';
   $('pModels').value=p?(p.models||[]).join(', '):'SenseChat-5, SenseChat-Turbo';
