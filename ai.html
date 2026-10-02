@@ -877,10 +877,6 @@ function initSbNav(){
       const v=mod.dataset.view;
       if(mod.classList.contains('soon')){toast('该模块即将上线');return;}
       showSbView(v);
-      const sd=document.getElementById('sidebar');
-      const bk=document.getElementById('sbBackdrop');
-      if(sd&&window.innerWidth<=860){sd.classList.remove('open');}
-      if(bk)bk.classList.remove('open');
     };
   });
   const back=document.getElementById('sbBack');
