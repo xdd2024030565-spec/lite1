@@ -508,8 +508,12 @@ function renderToolsModal(){
   // MCP
   const me=$('mcpList');
   me.innerHTML=mcpServers.map(s=>{
-    return '<div class="tool-item"><span class="n">🔌 '+esc(s.name)+'</span><span class="d">'+esc(s.url||'')+'</span><label class="switch"><input type="checkbox" data-mid="'+s.id+'"'+(s.enabled!==false?' checked':'')+'><span class="slider"></span></label><button class="btn small" data-mdel="'+s.id+'">✕</button></div>';
+    const cnt=(s.tools||[]).length;
+    const bad=s.lastError?' style="border-color:var(--danger)"':'';
+    const err=s.lastError?'<div class="hint" style="color:var(--danger);width:100%">'+esc(s.lastError)+'</div>':'';
+    return '<div class="tool-item"'+bad+'><div style="flex:1;min-width:0"><div class="n">🔌 '+esc(s.name)+' <span class="hint" style="margin:0">'+(cnt?cnt+' 个工具':'未拉取')+'</span></div><div class="hint" style="margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.url||'')+'</div>'+err+'</div><button class="btn small" data-mref="'+s.id+'">重拉</button><label class="switch"><input type="checkbox" data-mid="'+s.id+'"'+(s.enabled!==false?' checked':'')+'><span class="slider"></span></label><button class="btn small" data-mdel="'+s.id+'">✕</button></div>';
   }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:4px">未添加 MCP 服务器</div>';
+  me.querySelectorAll('[data-mref]').forEach(b=>b.onclick=()=>loadMcpTools(b.dataset.mref));
   me.querySelectorAll('input').forEach(i=>i.onchange=()=>{const s=mcpServers.find(x=>x.id===i.dataset.mid);if(s)s.enabled=i.checked;persist();updateStatus();});
   me.querySelectorAll('[data-mdel]').forEach(b=>b.onclick=()=>{mcpServers=mcpServers.filter(x=>x.id!==b.dataset.mdel);persist();renderToolsModal();updateStatus();});
   // 插件
@@ -700,6 +704,41 @@ async function runTool(name,args){
 }
 
 // ===== MCP 客户端 =====
+// 解析 MCP 响应：兼容纯 JSON 与 SSE(text/event-stream)
+async function parseMcpResponse(r){
+  const ct=(r.headers.get("content-type")||"").toLowerCase();
+  const sid=r.headers.get("mcp-session-id");
+  let text="";
+  try{text=await r.text();}catch(e){return {error:{message:"读取响应失败: "+e.message}};}
+  // 优先按 SSE 解析
+  if(text.indexOf("data:")>=0){
+    const lines=text.split(/\r?\n/);
+    let last=null;
+    for(const ln of lines){
+      const t=ln.trim();
+      if(!t.startsWith("data:"))continue;
+      const d=t.slice(5).trim();
+      if(!d||d==="[DONE]")continue;
+      try{last=JSON.parse(d);}catch(e){}
+    }
+    if(last)return Object.assign(last,{_sid:sid});
+  }
+  try{return Object.assign(JSON.parse(text),{_sid:sid});}catch(e){
+    return {error:{message:"HTTP "+r.status+" 响应不是有效 JSON: "+text.slice(0,200)}};
+  }
+}
+// 统一的 MCP 请求：自动带会话头，自动解析 SSE
+async function mcpRequest(s,payload){
+  const h=mcpHeaders(s);
+  if(s.sessionId)h["mcp-session-id"]=s.sessionId;
+  const r=await fetch(s.url,{method:"POST",headers:h,body:JSON.stringify(payload)});
+  const j=await parseMcpResponse(r);
+  if(j&&j._sid){s.sessionId=j._sid;delete j._sid;}
+  if(!r.ok&&(!j||j.error===undefined)){
+    return {error:{message:"HTTP "+r.status+(j&&j.error?": "+JSON.stringify(j.error).slice(0,200):"")}};
+  }
+  return j;
+}
 function mcpHeaders(s){
   const h={'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
   if(s.token)h['Authorization']='Bearer '+s.token;
@@ -708,200 +747,40 @@ function mcpHeaders(s){
   return h;
 }
 async function loadMcpTools(id){
-  const s=mcpServers.find(x=>x.id===id);if(!s)return;
+  const s=mcpServers.find(x=>x.id===id);
+  if(!s)return;
+  s.tools=s.tools||[];
+  toast("正在连接 "+s.name+" …");
   try{
-    const r=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'ai-toolbox',version:'1.0.0'}}})});
-    const init=await r.json();
-    const proto=init.result&&init.result.protocolVersion;
-    // 通知服务器已初始化
-    try{await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})});}catch(e){}
-    const t=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}})});
-    const tj=await t.json();
-    s.tools=(tj.result&&tj.result.tools)||[];
-    s.protocol=proto;
-    persist();renderToolsModal();updateStatus();toast('已拉取 '+s.tools.length+' 个 MCP 工具');
-  }catch(e){toast('MCP 拉取失败: '+e.message)}
+    // 1) 初始化握手
+    const init=await mcpRequest(s,{jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2024-11-05",capabilities:{},clientInfo:{name:"ai-toolbox",version:"1.0.0"}}});
+    if(init&&init.error){throw new Error(typeof init.error==="string"?init.error:(init.error.message||JSON.stringify(init.error)));}
+    s.protocol=(init&&init.result&&init.result.protocolVersion)||s.protocol;
+    // 2) 发送 initialized 通知（无 id，无需等响应）
+    try{await mcpRequest(s,{jsonrpc:"2.0",method:"notifications/initialized"});}catch(e){}
+    // 3) 拉取工具列表
+    const tj=await mcpRequest(s,{jsonrpc:"2.0",id:2,method:"tools/list",params:{}});
+    if(tj&&tj.error){throw new Error(typeof tj.error==="string"?tj.error:(tj.error.message||JSON.stringify(tj.error)));}
+    const list=(tj&&tj.result&&tj.result.tools)||[];
+    s.tools=list;
+    s.lastError="";
+    persist();renderToolsModal();updateStatus();
+    toast("已拉取 "+list.length+" 个 MCP 工具");
+  }catch(e){
+    s.lastError=String((e&&e.message)||e);
+    persist();renderToolsModal();
+    toast("MCP 拉取失败: "+s.lastError);
+  }
 }
 async function callMcpTool(s,name,args){
   try{
-    const r=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method:'tools/call',params:{name,arguments:args||{}}})});
-    const j=await r.json();
-    const content=j.result&&j.result.content||[];
-    return content.map(c=>c.text||JSON.stringify(c)).join('\n').slice(0,5000);
-  }catch(e){return 'MCP 调用失败: '+e.message}
+    const j=await mcpRequest(s,{jsonrpc:"2.0",id:Date.now(),method:"tools/call",params:{name:name,arguments:args||{}}});
+    if(j&&j.error){return "MCP 错误: "+(typeof j.error==="string"?j.error:(j.error.message||JSON.stringify(j.error)));}
+    const content=(j&&j.result&&j.result.content)||[];
+    const out=content.map(c=>c.text!==undefined?c.text:JSON.stringify(c)).join("\n");
+    return out.slice(0,5000)||"（工具返回为空）";
+  }catch(e){return "MCP 调用失败: "+((e&&e.message)||e);}
 }
-
-// ===== API 请求 =====
-// 计算实际请求地址：支持「自带代理 / 内置代理 / 直连」三种模式
-function buildUrl(p, endpoint){
-  const ep = endpoint || '/chat/completions';
-  let base=(p.base||'').replace(/\/+$/,'');
-  // 1) 用户自己填了代理地址 -> 优先用它
-  if(p.proxy){
-    return p.proxy.replace(/\/+$/,'') + ep;
-  }
-  // 2) 手动或自动启用内置代理
-  if(settings.useProxy || needProxyFor(base)){
-    const pb=(settings.proxyBase||BUILTIN_PROXY).replace(/\/+$/,'');
-    const tgt=encodeURIComponent(base);
-    return pb + '/v1' + ep + (ep.includes('?')?'&':'?') + 'target=' + tgt;
-  }
-  // 3) 直连
-  return base + ep;
-}
-// 代理模式下请求需要携带 X-Target-Base 头（兼容两种代理协议）
-function buildHeaders(p){
-  const h={'Content-Type':'application/json'};
-  if(p.key)h['Authorization']='Bearer '+p.key;
-  const base=(p.base||'').replace(/\/+$/,'');
-  if(!p.proxy && (settings.useProxy||needProxyFor(base))){
-    h['X-Target-Base']=base;
-  }
-  return h;
-}
-async function chatOnce(messages,tools){
-  const p=activeProvider();
-  if(!p||!p.base){throw new Error('未配置提供商')}
-  if(!p.key){throw new Error('未设置 API Key')}
-  const model=selectedModel||(p.models||[])[0];
-  const body={model,messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
-  if(tools&&tools.length)body.tools=tools;
-  const headers=buildHeaders(p);
-  const r=await fetch(buildUrl(p),{method:'POST',headers,body:JSON.stringify(body)});
-  if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
-  return await r.json();
-}
-
-// ===== 流式请求 (SSE)，支持 content 与 tool_calls =====
-async function chatStreamFull(messages,onDelta,tools){
-  const p=activeProvider();
-  if(!p||!p.base)throw new Error('未配置提供商');
-  if(!p.key)throw new Error('未设置 API Key');
-  const model=selectedModel||(p.models||[])[0];
-  const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
-  if(tools&&tools.length){body.tools=tools;body.tool_choice='auto';}
-  const headers=buildHeaders(p);
-  const r=await fetch(buildUrl(p),{method:'POST',headers:headers,body:JSON.stringify(body)});
-  if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
-  const reader=r.body.getReader();
-  const dec=new TextDecoder();
-  let buf='',full='',reasoning='';
-  const toolCalls=[];
-  while(true){
-    const {done,value}=await reader.read();
-    if(done)break;
-    buf+=dec.decode(value,{stream:true});
-    const lines=buf.split(String.fromCharCode(10));
-    buf=lines.pop()||'';
-    for(const line of lines){
-      const t=line.trim();
-      if(!t.startsWith('data:'))continue;
-      const data=t.slice(5).trim();
-      if(data==='[DONE]')continue;
-      try{
-        const j=JSON.parse(data);
-        const ch=j.choices&&j.choices[0];
-        if(!ch)continue;
-        const delta=ch.delta||{};
-        if(delta.content){full+=delta.content;if(onDelta)onDelta(full,reasoning)}
-        if(delta.reasoning_content){reasoning+=delta.reasoning_content;}
-        if(delta.tool_calls){
-          delta.tool_calls.forEach(tc=>{
-            const idx=tc.index||0;
-            if(!toolCalls[idx])toolCalls[idx]={id:tc.id||('call_'+idx),type:'function',function:{name:'',arguments:''}};
-            if(tc.id)toolCalls[idx].id=tc.id;
-            if(tc.function){
-              if(tc.function.name)toolCalls[idx].function.name+=tc.function.name;
-              if(tc.function.arguments)toolCalls[idx].function.arguments+=tc.function.arguments;
-            }
-          });
-        }
-      }catch(e){}
-    }
-  }
-  return {content:full,reasoning:reasoning,toolCalls:toolCalls.filter(Boolean)};
-}
-
-// ===== 对话主循环 =====
-let sending=false;
-let lastError='';
-let stopFlag=false;
-async function sendMessage(){
-  if(sending)return;
-  const inp=$("input");const text=inp.value.trim();
-  if(!text){return}
-  let s=curSession();
-  if(!s){newSession();s=curSession();}
-  s.messages.push({role:"user",content:text});
-  inp.value="";autoGrow();
-  renderMsgs();
-  await runCompletion();
-}
-async function runCompletion(){
-  let s=curSession();
-  if(!s){newSession();s=curSession();}
-  sending=true;$('sendBtn').disabled=true;$('sendBtn').style.display='none';$('stopBtn').style.display='';
-  stopFlag=false;
-  const p=activeProvider();
-  // 只在没有系统消息时插入，避免多次重试重复叠加
-  const _tools0=collectTools();
-  {const sp=buildSystemPrompt(p&&p.sys,_tools0);if(sp){s.messages=s.messages.filter(m=>m.role!=="system");s.messages.unshift({role:"system",content:sp});}}
-  try{
-    const tools=collectTools();
-    const msgs=s.messages.filter(m=>m.role!=='system'||m===s.messages[0]);
-    let loop=0;
-    while(loop<6&&!stopFlag){
-      let lastContent='';
-      const partial=await chatStreamFull(msgs,(full,reasoningText)=>{
-        lastContent=full;
-        let existing=s.messages.find(m=>m.role==='assistant'&&m._streaming);
-        if(!existing){
-          // 首帧：插入占位并全量渲染一次，之后只增量更新气泡
-          s.messages.push({role:'assistant',content:full,reasoning:reasoningText||'',_streaming:true});
-          if(!s.title||s.title==='新对话'){const first=s.messages.find(m=>m.role==='user');if(first&&first.content)s.title=String(first.content).slice(0,16);}
-          renderMsgs();
-          const box=$('msgs');if(box)box.scrollTop=box.scrollHeight;
-          _streamDirty=true;renderStreamThrottled();
-          return;
-        }
-        existing.content=full;
-        if(reasoningText)existing.reasoning=reasoningText;
-        _streamDirty=true;
-        renderStreamThrottled();
-      },tools);
-      s.messages=s.messages.filter(m=>!(m._streaming));
-      if(partial.content||partial.reasoning){s.messages.push({role:'assistant',content:partial.content||'',reasoning:partial.reasoning||''});}
-      const tcs=partial.toolCalls||[];
-      if(tcs.length&&!stopFlag){
-        s.messages.push({role:'assistant',content:partial.content||'',toolCalls:tcs});
-        for(const tc of tcs){
-          if(stopFlag)break;
-          let args={};try{args=JSON.parse(tc.function.arguments||'{}')}catch(e){}
-          const result=await runTool(tc.function.name,args);
-          s.messages.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
-          msgs.push({role:'assistant',content:partial.content||'',tool_calls:tcs});
-          msgs.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
-          renderMsgs();
-        }
-        loop++;continue;
-      }
-      break;
-    }
-  }catch(e){
-    const partialMsg=s.messages.find(m=>m.role==='assistant'&&m._streaming);
-    const kept=partialMsg?(partialMsg.content||''):'';
-    const keptReason=partialMsg?(partialMsg.reasoning||''):'';
-    s.messages=s.messages.filter(m=>!(m._streaming));
-    if(kept){s.messages.push({role:'assistant',content:kept,reasoning:keptReason});}
-    const raw=String((e&&e.message)||e||'未知错误');
-    const kind=/HTTP 401|HTTP 403|未设置 API Key|未配置/.test(raw)?'配置错误':(/(500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|timeout|超时)/i.test(raw)?'网络或服务异常':'其他错误');
-    s.messages.push({role:'assistant',content:'⚠️ '+kind+'：'+raw,_error:true});
-    lastError=raw;
-  }
-  sending=false;$('sendBtn').disabled=false;stopFlag=false;$('sendBtn').style.display='';$('stopBtn').style.display='none';
-  renderMsgs();persist();
-}
-
 // 重试：删掉错误卡片，用相同历史再请求一次
 async function retryLast(){
   const st=curSession();
