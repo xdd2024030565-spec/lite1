@@ -142,7 +142,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 <div class="modal-mask" id="providerModal">
   <div class="modal">
     <h2 id="providerModalTitle">添加提供商</h2>
-    <p class="sub">填写 OpenAI 兼容接口。商汤、OpenAI 等会自动经代理��问。</p>
+    <p class="sub">填写 OpenAI 兼容接口。商汤、OpenAI 等会自动经代理����问。</p>
     <div class="tabs"><button type="button" class="on" data-tab="p-basic">连接</button><button type="button" data-tab="p-model">模型</button><button type="button" data-tab="p-adv">高级</button></div>
     <div class="tab-pane on" id="p-basic">
       <div class="form-row"><label>常用模板</label><select id="pTemplate"><option value="">自定义</option><option value="sensenova">商汤 SenseNova</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option><option value="qwen">通义千问</option><option value="moonshot">Kimi</option><option value="zhipu">智谱</option><option value="doubao">豆包</option><option value="ollama">Ollama（本地）</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option></select></div>
@@ -164,7 +164,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 <div class="modal-mask" id="toolsModal">
   <div class="modal">
     <h2>能力中心</h2><p class="sub">内置工具、远程 MCP 与 OpenAPI 插件。</p>
-    <div class="tabs"><button type="button" class="on" data-tab="t-built">内置</button><button type="button" data-tab="t-mcp">MCP</button><button type="button" data-tab="t-plugin">插件</button></div>
+    <div class="tabs"><button type="button" class="on" data-tab="t-built">内���</button><button type="button" data-tab="t-mcp">MCP</button><button type="button" data-tab="t-plugin">插件</button></div>
     <div class="tab-pane on" id="t-built"><div id="builtinTools"></div></div>
     <div class="tab-pane" id="t-mcp"><div class="form-actions" style="justify-content:space-between"><span class="hint" style="margin:0">远程 HTTP MCP，仅拉取并调用工具。</span><button class="btn small" id="btnAddMcp">添加</button></div><div id="mcpList"></div></div>
     <div class="tab-pane" id="t-plugin"><div class="form-actions" style="justify-content:space-between"><span class="hint" style="margin:0">支持 OpenAPI 与自定义 JSON 工具。</span><button class="btn small" id="btnAddPlugin">添加</button></div><div id="pluginList"></div></div>
@@ -173,7 +173,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 </div>
 <div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">��消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
 <div class="modal-mask" id="pluginModal"><div class="modal"><h2>添加插件</h2><div class="form-row"><label>名称</label><input id="plName"></div><div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件</option><option value="custom">自定义 JSON 工具</option></select></div><div class="form-row"><label>OpenAPI 地址或 JSON</label><textarea id="plOpenapi" rows="4"></textarea></div><div id="customFields" style="display:none"><div class="form-row"><label>工具名称</label><input id="cName"></div><div class="form-row"><label>描述</label><input id="cDesc"></div><div class="form-row"><label>URL</label><input id="cUrl"></div><div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div><div class="form-row"><label>Headers（JSON）</label><input id="cHeaders"></div><div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3"></textarea></div></div><div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div></div></div>
-<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清��全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
+<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoRetry429" style="width:auto"> 遇到限流(429)自动重试</label><div class="hint">仅对限流与瞬时连接错误自动重试，次数见下方。</div></div><div class="form-row"><label>自动重试次数 <span id="retryVal">5</span></label><input type="range" id="setMaxRetry" min="0" max="10" step="1" value="5"><div class="hint">设为 0 则不自动重试。退避间隔 2/4/8/16/30 秒。</div></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清��全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
 // ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
@@ -196,7 +196,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
     try{ localStorage.setItem('gw_custom_'+service, url||''); }catch(e){}
   }
 
-  // ���康检查：GET /health 或根路��，3 秒超时
+  // ���康检查��GET /health 或根路��，3 秒超时
   function test(url){
     return new Promise(function(resolve){
       var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -292,7 +292,7 @@ let activeSessionId=load(LS_KEYS.activeSession,null);
 let mcpServers=load(LS_KEYS.mcp,[]);
 let plugins=load(LS_KEYS.plugins,[]);
 let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
-let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc'});
+let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true});
 // 内置公共代理（解决浏览器 CORS：商汤/OpenAI 等预检不完整）
 const BUILTIN_PROXY='https://ai.yongjiu.ccwu.cc';
 // 这些上游经浏览器直连会被 CORS 拦，建议强制走代理
@@ -434,7 +434,12 @@ function renderMsgs(){
     if(m.role==='system')return '';
 
     if(m.role==='tool'){
-      return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap">'+esc(String(m.content||'').slice(0,2000))+'</div></div>';
+      const body=String(m.content||'');
+      const bad=(m._toolErr||/^(搜索失败|抓取失败|MCP 错误|MCP 调用失败|工具执行失败)/.test(body));
+      if(bad){
+        return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);border:1px solid var(--danger)"><details><summary style="cursor:pointer;color:var(--danger);font-size:12px">❌ 工具执行失败，点击查看详情</summary><div style="margin-top:8px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;color:var(--danger)">'+esc(body.slice(0,3000))+'</div></details></div></div>';
+      }
+      return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap">'+esc(body.slice(0,2000))+'</div></div>';
     }
     if(m.toolCalls&&m.toolCalls.length){
       const calls=m.toolCalls.map(tc=>'<div class="tool-call">🔧 '+esc(tc.function.name)+'('+esc(JSON.stringify(JSON.parse(tc.function.arguments||'{}')))+')</div>').join('');
@@ -573,7 +578,7 @@ function buildSystemPrompt(userSys,tools){
   const head=[
     "你是一个可以直接调用工具的工作型 AI。",
     "当问题需要实时信息、外部数据或实际动作时，优先调用下面的工具，而不是回答“我无法访问”。",
-    "工具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。",
+    "��具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。",
     "你可以分析问题、决定调用哪个工具、根据返回结果继���推理。",
     "",
     "你当前可用的工具：",
@@ -712,7 +717,7 @@ async function parseMcpResponse(r){
   const ct=(r.headers.get("content-type")||"").toLowerCase();
   const sid=r.headers.get("mcp-session-id");
   let text="";
-  try{text=await r.text();}catch(e){return {error:{message:"读取响应失败: "+e.message}};}
+  try{text=await r.text();}catch(e){return {error:{message:"���取响应失败: "+e.message}};}
   // 优先按 SSE 解析
   if(text.indexOf("data:")>=0){
     const lines=text.split(/\r?\n/);
@@ -810,7 +815,7 @@ function buildHeaders(p){
   return h;
 }
 
-// ===== 非流式请求（供工具循环备用） =====
+// ===== 非流��请求（供工具循环备用） =====
 async function chatOnce(messages,tools){
   const p=activeProvider();
   if(!p||!p.base)throw new Error("未配置提供商");
@@ -875,9 +880,11 @@ async function chatStreamFull(messages,onDelta,tools){
 // 能否自动重试：限流、瞬时网络、服务端 5xx
 function isRetriable(msg){
   const m=String(msg||"");
-  if(/HTTP 401|HTTP 403|未设置 API Key|未配置提供商|HTTP 404/.test(m))return false;
+  if(settings.autoRetry429===false)return false;
+  if(maxRetry()<=0)return false; // 次数为0则不重试
+  // 仅限流与瞬时连接类错误
   if(/429|rate_limit|tpm|rpm|限流|too many requests/i.test(m))return true;
-  if(/500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|ECONNABORTED|timeout|超时|socket/i.test(m))return true;
+  if(/Failed to fetch|NetworkError|ECONNRESET|ECONNABORTED|network error|socket hang up/i.test(m))return true;
   return false;
 }
 // 退避秒数：2,4,8,16,30
@@ -885,7 +892,8 @@ function backoffDelay(attempt){
   const seq=[2,4,8,16,30];
   return seq[Math.min(attempt,seq.length-1)];
 }
-const MAX_RETRY=5;
+function maxRetry(){const v=settings.maxRetry;return (v===undefined||v===null)?5:Number(v);}
+function shouldRetry(){return maxRetry()>0;}
 function sleep(ms){
   return new Promise(res=>{
     const t=setInterval(()=>{
@@ -942,22 +950,22 @@ async function runCompletion(){
           break; // 成功，跳出重试
         }catch(err){
           const em=String((err&&err.message)||err||"未知错误");
-          if(!isRetriable(em)||retries>=MAX_RETRY||stopFlag){
+          if(!isRetriable(em)||retries>=maxRetry()||stopFlag){
             throw err; // 不可重试或已达上限
           }
           const wait=backoffDelay(retries);
           retries++;
           // 保留已产出内容，在同一气泡内提示重试
           let cnt=wait;
-          setStreamNotice(s,"连接不稳定，"+wait+" 秒后自动重试（"+retries+"/"+MAX_RETRY+"）");
+          setStreamNotice(s,"连接不稳定，"+wait+" 秒后自动重试（"+retries+"/"+maxRetry()+"）");
           const tick=setInterval(()=>{
             cnt--;
-            if(cnt>0&&!stopFlag)setStreamNotice(s,"连接不稳定，"+cnt+" 秒后自动重试（"+retries+"/"+MAX_RETRY+"）");
+            if(cnt>0&&!stopFlag)setStreamNotice(s,"连接不稳定，"+cnt+" 秒后自动重试（"+retries+"/"+maxRetry()+"）");
           },1000);
           const st=await sleep(wait*1000);
           clearInterval(tick);
           if(st==="aborted"||stopFlag)throw err;
-          setStreamNotice(s,"正在重试（"+retries+"/"+MAX_RETRY+"）…");
+          setStreamNotice(s,"正在重试（"+retries+"/"+maxRetry()+"）…");
         }
       }
       const m2=s.messages.find(x=>x.role==="assistant"&&x._streaming);
@@ -970,8 +978,15 @@ async function runCompletion(){
         for(const tc of tcs){
           if(stopFlag)break;
           let args={};try{args=JSON.parse(tc.function.arguments||"{}");}catch(e){}
-          const result=await runTool(tc.function.name,args);
-          s.messages.push({role:"tool",tool_call_id:tc.id,name:tc.function.name,content:result});
+          let result='';let toolErr=false;
+          try{
+            result=await runTool(tc.function.name,args);
+            if(/^(搜索失败|抓取失败|MCP 错误|MCP 调用失败|工具执行失败)/.test(String(result||'')))toolErr=true;
+          }catch(te){result='工具执行失败: '+((te&&te.message)||te);toolErr=true;}
+          // 工具失败不中断对话：把错误作为工具结果回传，让模型自行判断与继续
+          const toolMsg={role:"tool",tool_call_id:tc.id,name:tc.function.name,content:result};
+          if(toolErr)toolMsg._toolErr=true;
+          s.messages.push(toolMsg);
           msgs.push({role:"assistant",content:partial.content||"",tool_calls:tcs});
           msgs.push({role:"tool",tool_call_id:tc.id,name:tc.function.name,content:result});
           renderMsgs();
@@ -989,11 +1004,11 @@ async function runCompletion(){
       pm._streaming=false;
       pm._notice="";
       pm._error=true;
-      pm._errText=cfg?("请求未通过："+raw):("已自动重试 "+MAX_RETRY+" 次仍未成功："+raw);
+      pm._errText=cfg?("请求未通过："+raw):("已自动重试 "+maxRetry()+" 次仍未成功："+raw);
       if(!pm.content)pm.content=cfg?"无法继续此条回复。":"（重试多次仍失败）";
     }else{
       // 完全没有产出时才建一条，并直接标错
-      s.messages.push({role:"assistant",content:cfg?"无法开始本次回复。":"（重试多次仍失败）",_error:true,_errText:cfg?("请求未通过："+raw):("已自动重试 "+MAX_RETRY+" 次仍未成功："+raw)});
+      s.messages.push({role:"assistant",content:cfg?"无法开始本次回复。":"（重试多次仍失败）",_error:true,_errText:cfg?("请求未通过："+raw):("已自动重试 "+maxRetry()+" 次仍未成功："+raw)});
     }
     lastError=raw;
   }
@@ -1062,6 +1077,9 @@ $('sbBackdrop').onclick=()=>{$('sidebar').classList.remove('open');$('sbBackdrop
 $('btnSettings').onclick=()=>{
   $('setTemp').value=settings.temperature||0.7;$('tempVal').textContent=settings.temperature||0.7;
   $('setMaxTokens').value=settings.maxTokens||2048;
+  $('setMaxRetry').value=(settings.maxRetry===undefined?5:settings.maxRetry);
+  $('retryVal').textContent=(settings.maxRetry===undefined?5:settings.maxRetry);
+  $('setAutoRetry429').checked=settings.autoRetry429!==false;
   $('setUseProxy').checked=!!settings.useProxy;
   $('setProxyBase').value=settings.proxyBase||BUILTIN_PROXY;
   $('settingsModal').classList.add('open');
@@ -1101,6 +1119,8 @@ $('btnWipe').onclick=()=>{
 $('settingsSave').onclick=()=>{
   settings.temperature=parseFloat($('setTemp').value)||0.7;
   settings.maxTokens=parseInt($('setMaxTokens').value)||2048;
+  settings.maxRetry=parseInt($('setMaxRetry').value);if(isNaN(settings.maxRetry))settings.maxRetry=5;
+  settings.autoRetry429=$('setAutoRetry429').checked;
   settings.useProxy=$('setUseProxy').checked;
   settings.proxyBase=$('setProxyBase').value.trim()||BUILTIN_PROXY;
   persist();$('settingsModal').classList.remove('open');toast('设置已保存');
