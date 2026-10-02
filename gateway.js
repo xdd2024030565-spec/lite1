@@ -10,6 +10,9 @@
     search: ["https://search.yongjiu.ccwu.cc", "https://search2.yongjiu.ccwu.cc"]
   };
 
+  // 选优结果回调（可在外部覆盖：APIGateway.onBest = fn）
+  var onBest = null;
+
   // 快捷保留区：用户可手动填写的备用订阅地址（失效时自动切换到这里）
   function getCustom(service){
     try{ return localStorage.getItem('gw_custom_'+service)||''; }catch(e){ return ''; }
@@ -19,15 +22,20 @@
   }
 
   // 健康检查：GET /health 或根路径，3 秒超时
-  function test(url){
+  function test(url, attempt){
+    attempt = attempt || 1;
     return new Promise(function(resolve){
       var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
-      var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); resolve(false); }, 3000);
+      var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); retryOrFail(); }, attempt===1?3000:4000);
       var opts = {method:'GET', cache:'no-store'};
       if(ctrl) opts.signal = ctrl.signal;
+      function retryOrFail(){
+        // 首次失败后再试一次（弱网/丢包环境下更稳）
+        if(attempt < 2){ test(url, attempt+1).then(resolve); } else { resolve(false); }
+      }
       fetch(url+'/health', opts)
         .then(function(r){ clearTimeout(timer); resolve(r.ok || r.status===404); })
-        .catch(function(){ clearTimeout(timer); resolve(false); });
+        .catch(function(){ clearTimeout(timer); retryOrFail(); });
     });
   }
 
@@ -47,12 +55,18 @@
       probing[service] = true;
       var results = [];
       pool.forEach(function(url, i){
+        var t0 = Date.now();
         test(url).then(function(ok){
-          results.push({url:url, ok:ok, idx:i});
+          results.push({url:url, ok:ok, idx:i, ms:Date.now()-t0});
           if(results.length===pool.length){
-            var best = results.filter(function(r){return r.ok;}).sort(function(a,b){return a.idx-b.idx;})[0];
-            if(best){ bestCache[service] = {url:best.url, ts:Date.now()}; }
+            // 优先可用的，其次按响应速度排序；都不可用时保留默认首位
+            var usable = results.filter(function(r){return r.ok;});
+            if(usable.length){
+              usable.sort(function(a,b){ return (a.ms-b.ms) || (a.idx-b.idx); });
+              bestCache[service] = {url:usable[0].url, ts:Date.now()};
+            }
             probing[service] = false;
+            if(typeof onBest==='function'){ try{ onBest(service, bestCache[service] && bestCache[service].url); }catch(e){} }
           }
         });
       });
@@ -78,6 +92,8 @@
     pool: GATEWAY_POOL,
     refresh: refresh,
     _cache: bestCache,
-    _test: test
+    _test: test,
+    get onBest(){ return onBest; },
+    set onBest(fn){ onBest = fn; }
   };
 })();
