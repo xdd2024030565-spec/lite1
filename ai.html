@@ -293,7 +293,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
     <div class="msgs" id="msgs"></div>
     <div class="inputbar">
       <div class="inputwrap">
-        <textarea id="input" placeholder="输入消息…" rows="1"></textarea>
+        <textarea id="input" placeholder="输入���息…" rows="1"></textarea>
         <button class="send-btn" id="sendBtn" title="发送">➤</button>
         <button class="send-btn" id="stopBtn" title="停止生成" style="display:none;background:var(--danger)">■</button>
       </div>
@@ -336,7 +336,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 </div>
 <div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">��消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
 <div class="modal-mask" id="pluginModal"><div class="modal"><h2>添加插件</h2><div class="form-row"><label>名称</label><input id="plName"></div><div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件</option><option value="custom">自定义 JSON 工具</option></select></div><div class="form-row"><label>OpenAPI 地址或 JSON</label><textarea id="plOpenapi" rows="4"></textarea></div><div id="customFields" style="display:none"><div class="form-row"><label>工具名称</label><input id="cName"></div><div class="form-row"><label>描述</label><input id="cDesc"></div><div class="form-row"><label>URL</label><input id="cUrl"></div><div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div><div class="form-row"><label>Headers（JSON）</label><input id="cHeaders"></div><div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3"></textarea></div></div><div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div></div></div>
-<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoRetry429" style="width:auto"> 遇到限流(429)自动重试</label><div class="hint">仅对限流与瞬时连接错误自动重试，次数见下方。</div></div><div class="form-row"><label>自动重试次数 <span id="retryVal">5</span></label><input type="range" id="setMaxRetry" min="0" max="10" step="1" value="5"><div class="hint">设为 0 则不自动重试。退避间隔 2/4/8/16/30 秒。</div></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清��全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
+<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoRetry429" style="width:auto"> 遇到限流(429)自动重试</label><div class="hint">仅对限流与瞬时连接错误自动重试，次数见下方。</div></div><div class="form-row"><label>自动重试次数 <span id="retryVal">5</span></label><input type="range" id="setMaxRetry" min="0" max="10" step="1" value="5"><div class="hint">设为 0 则不自动重试。退避间隔 2/4/8/16/30 秒。</div></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoCompress" style="width:auto"> 超长对话自动压缩</label><div class="hint">接近上下文上限时，把早期对话摘要为一条记录，避免报错。</div></div><div class="form-row"><label>压缩触发阈值 <span id="cmpVal">80</span>%</label><input type="range" id="setCmpTh" min="50" max="95" step="5" value="80"><div class="hint">达到最大 Tokens 的该比例时触发压缩。</div></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清��全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
 // ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
@@ -455,7 +455,7 @@ let activeSessionId=load(LS_KEYS.activeSession,null);
 let mcpServers=load(LS_KEYS.mcp,[]);
 let plugins=load(LS_KEYS.plugins,[]);
 let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
-let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true});
+let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true,autoCompress:true,compressTh:80});
 // 内置公共代理（解决浏览器 CORS：商汤/OpenAI 等预检不完整）
 const BUILTIN_PROXY='https://ai.yongjiu.ccwu.cc';
 // 这些上游经浏览器直连会被 CORS 拦，建议强制走代理
@@ -616,6 +616,7 @@ function renderMsgs(){
     return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+noticeHtml+reasoningHtml+md(m.content||'')+errHtml+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
+  updateCtxBar();
 }
 // 极简语法高亮
 const HL_KW={};
@@ -734,7 +735,7 @@ function patchStreamBubble(){
   const box=document.getElementById('msgs');
   if(box)box.scrollTop=box.scrollHeight;
 }
-function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();}
+function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();updateCtxBar();}
 
 // ===== 工具/MCP/插件管理 UI =====
 function updateStatus(){
@@ -1033,7 +1034,7 @@ async function callMcpTool(s,name,args){
   }catch(e){return "MCP 调用失败: "+((e&&e.message)||e);}
 }
 // ===== API 请求 =====
-// 计算实际请求地址：支持「专有代理 / 内置代理 / 直连」三种模式
+// 计算实际请求地址：支��「专有代理 / 内置代理 / 直连」三种模式
 function buildUrl(p, endpoint){
   const ep = endpoint || "/chat/completions";
   let base=(p.base||"").replace(/\/+$/,"");
@@ -1155,6 +1156,62 @@ function setStreamNotice(s,text){
 let sending=false;
 let stopFlag=false;
 let lastError="";
+// ===== 上下文管理 =====
+function estimateTokens(text){
+  const t=String(text||'');
+  const cjk=t.match(/[\u4e00-\u9fff]/g);
+  const cjkN=cjk?cjk.length:0;
+  const rest=t.replace(/[\u4e00-\u9fff]/g,' ');
+  const words=rest.trim()?rest.trim().split(/\s+/).length:0;
+  return Math.ceil(cjkN*0.9+words*0.35);
+}
+function calcSessionTokens(s){
+  if(!s||!s.messages)return 0;
+  let n=0;
+  s.messages.forEach(function(m){
+    n+=estimateTokens(m.content||'');
+    if(m.toolCalls)n+=estimateTokens(JSON.stringify(m.toolCalls));
+    if(m.reasoning)n+=estimateTokens(m.reasoning);
+  });
+  return n;
+}
+function updateCtxBar(){
+  const s=curSession();
+  const limit=settings.maxTokens||2048;
+  const used=calcSessionTokens(s);
+  const pct=Math.min(100,Math.round(used/limit*100));
+  const bar=document.getElementById('ctxbar');
+  const chip=document.getElementById('ctxChip');
+  if(bar){bar.className='ctxbar '+(pct>90?'err':pct>70?'warn':'');bar.firstElementChild.style.width=pct+'%';}
+  if(chip){chip.style.display=used>0?'':'none';chip.textContent='CTX '+pct+'% '+Math.round(used)+'/'+limit;if(pct>90)chip.style.color='var(--err)';else if(pct>70)chip.style.color='var(--warn)';else chip.style.color='';}
+}
+
+async function compressContext(s){
+  // 保留最近 6 条非 system，其余交给模型摘要
+  const msgs=s.messages||[];
+  const norm=msgs.filter(function(m){return m.role!=='system';});
+  const keep=Math.min(6,norm.length);
+  const oldMsgs=norm.slice(0,norm.length-keep);
+  if(oldMsgs.length<4)return false;
+  const txt=oldMsgs.map(function(m){return (m.role==='user'?'用户':m.role==='assistant'?'助手':'工具')+': '+String(m.content||'').slice(0,600);}).join(String.fromCharCode(10));
+  const sysMsg={role:'system',content:'请用简洁的中文总结这段对话的核心要点（用户意图、已解决问题、重要结论）。只输出总结本身，不要前缀。'};
+  const userMsg={role:'user',content:'以下是要总结的对话历史：'+String.fromCharCode(10)+txt};
+  try{
+    const resp=await chatOnce([sysMsg,userMsg],[]);
+    const summary=(resp&&resp.choices&&resp.choices[0]&&resp.choices[0].message&&resp.choices[0].message.content)||'';
+    if(!summary)return false;
+    // 替换：旧消息删掉，插入一条 summary 系统消息
+    const remove=new Set(oldMsgs);
+    s.messages=s.messages.filter(function(m){return !remove.has(m);});
+    s.messages.unshift({role:'system',content:'以下是对更早对话的压缩摘要，供继续对话时参考：'+String.fromCharCode(10)+summary,_summary:true});
+    toast('上下文已自动压缩');
+    return true;
+  }catch(e){
+    console.warn('压缩失败',e);
+    return false;
+  }
+}
+
 async function runCompletion(){
   let s=curSession();
   if(!s){newSession();s=curSession();}
@@ -1163,12 +1220,19 @@ async function runCompletion(){
   stopFlag=false;
   const p=activeProvider();
   try{
+    // 上下文管理：先看用量，超阈值则压缩
+    updateCtxBar();
+    if(settings.autoCompress!==false){
+      const used=calcSessionTokens(s);
+      const th=(settings.compressTh||80)/100*(settings.maxTokens||2048);
+      if(used>th){await compressContext(s);updateCtxBar();}
+    }
     const tools=collectTools();
     // 注入工具清单，让模型知道自己能调用工具
     const sp=buildSystemPrompt(p&&p.sys,tools);
-    s.messages=s.messages.filter(m=>m.role!=="system");
+    s.messages=s.messages.filter(m=>!(m.role==="system"&&!m._summary));
     if(sp)s.messages.unshift({role:"system",content:sp});
-    const msgs=s.messages.filter(m=>m.role!=="system"||m===s.messages[0]);
+    const msgs=s.messages.filter(m=>m.role!=="system"||m._summary||m===s.messages[0]);
     let loop=0;
     while(loop<6&&!stopFlag){
       if(stopFlag)break;
@@ -1291,7 +1355,7 @@ async function retryThis(){
   renderMsgs();
   await runCompletion();
 }
-// 重试：删掉错误卡片，用相同历史再请求一次
+// 重试：删掉错误卡���，用相同历史再请求一次
 async function retryLast(){
   const st=curSession();
   if(!st||sending)return;
@@ -1323,6 +1387,9 @@ $('btnSettings').onclick=()=>{
   $('setMaxRetry').value=(settings.maxRetry===undefined?5:settings.maxRetry);
   $('retryVal').textContent=(settings.maxRetry===undefined?5:settings.maxRetry);
   $('setAutoRetry429').checked=settings.autoRetry429!==false;
+  $('setAutoCompress').checked=settings.autoCompress!==false;
+  $('setCmpTh').value=settings.compressTh||80;
+  $('cmpVal').textContent=settings.compressTh||80;
   $('setUseProxy').checked=!!settings.useProxy;
   $('setProxyBase').value=settings.proxyBase||BUILTIN_PROXY;
   $('settingsModal').classList.add('open');
@@ -1364,6 +1431,10 @@ $('settingsSave').onclick=()=>{
   settings.maxTokens=parseInt($('setMaxTokens').value)||2048;
   settings.maxRetry=parseInt($('setMaxRetry').value);if(isNaN(settings.maxRetry))settings.maxRetry=5;
   settings.autoRetry429=$('setAutoRetry429').checked;
+  settings.autoCompress=$('setAutoCompress').checked;
+  settings.compressTh=parseInt($('setCmpTh').value)||80;
+  settings.autoCompress=$('setAutoCompress').checked;
+  settings.compressTh=parseInt($('setCmpTh').value)||80;
   settings.useProxy=$('setUseProxy').checked;
   settings.proxyBase=$('setProxyBase').value.trim()||BUILTIN_PROXY;
   persist();$('settingsModal').classList.remove('open');toast('设置已保存');
