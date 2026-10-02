@@ -136,6 +136,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 <div class="modal-mask" id="providerModal">
   <div class="modal">
     <h2 id="providerModalTitle">添加提供商</h2>
+    <div class="form-row"><label>常用模板（可一键填入）</label><select id="pTemplate"><option value="">自定义</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic(OpenAI兼容)</option><option value="google">Google Gemini</option><option value="qwen">通义千问</option><option value="moonshot">Kimi</option><option value="zhipu">智谱</option><option value="doubao">豆包</option><option value="ollama">Ollama(本地)</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option></select></div>
     <div class="form-row"><label>名称</label><input id="pName" placeholder="例如：商汤日日新"></div>
     <div class="form-row"><label>API 地址 (baseURL)</label><input id="pBase" placeholder="https://api.sensenova.cn/v1">
       <div class="hint">OpenAI 兼容地址，程序自动拼接 /chat/completions。直连被 CORS 拦截时可留代理。</div></div>
@@ -206,7 +207,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     <h2>⚙️ 设置</h2>
     <div class="form-row"><label>温度（0-2，越高越随机）: <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div>
     <div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div>
-    <div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div>
+    <div class="form-row"><label>数据管理</label><div style="display:flex;gap:8px"><button class="btn small" id="btnExport">⬇ 导出配置</button><button class="btn small" id="btnImport">⬆ 导入配置</button><button class="btn small danger" id="btnWipe">🗑 清空全部</button></div><div class="hint">导出为 JSON 备份；导入可恢复提供商/会话/插件/设置。</div></div>
+<input type="file" id="importFile" accept=".json" style="display:none">
+<div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div>
   </div>
 </div>
 
@@ -265,10 +268,29 @@ function renderProviders(){
   ms.onchange=()=>{const sel=ms.options[ms.selectedIndex];if(sel&&sel.dataset.pid){activeProviderId=sel.dataset.pid;selectedModel=sel.value;persist();renderAll();}};
 }
 
+const PROVIDER_TEMPLATES={
+  openai:{name:'OpenAI',base:'https://api.openai.com/v1',models:['gpt-4o','gpt-4o-mini','o3-mini']},
+  anthropic:{name:'Anthropic',base:'https://api.anthropic.com/v1',models:['claude-3-7-sonnet-latest']},
+  google:{name:'Google Gemini',base:'https://generativelanguage.googleapis.com/v1beta/openai',models:['gemini-2.0-flash','gemini-1.5-pro']},
+  qwen:{name:'通义千问',base:'https://dashscope.aliyuncs.com/compatible-mode/v1',models:['qwen-max','qwen-plus','qwen-turbo']},
+  moonshot:{name:'Kimi',base:'https://api.moonshot.cn/v1',models:['moonshot-v1-8k','moonshot-v1-32k','moonshot-v1-128k']},
+  zhipu:{name:'智谱GLM',base:'https://open.bigmodel.cn/api/paas/v4',models:['glm-4-plus','glm-4-air']},
+  doubao:{name:'豆包',base:'https://ark.cn-beijing.volces.com/api/v3',models:['doubao-1-5-pro-32k','doubao-1-5-lite-32k']},
+  ollama:{name:'Ollama',base:'http://localhost:11434/v1',models:['llama3.1','qwen2.5']},
+  openrouter:{name:'OpenRouter',base:'https://openrouter.ai/api/v1',models:['openrouter/auto']},
+  groq:{name:'Groq',base:'https://api.groq.com/openai/v1',models:['llama-3.3-70b-versatile','mixtral-8x7b-32768']}
+};
+function applyTemplate(){
+  const t=$('pTemplate').value;if(!t)return;
+  const tp=PROVIDER_TEMPLATES[t];if(!tp)return;
+  $('pName').value=tp.name;$('pBase').value=tp.base;
+  $('pModels').value=tp.models.join(', ');
+}
+$('pTemplate').onchange=applyTemplate;
 function openProviderModal(id){
   const p=id?getProvider(id):null;
   $('providerModalTitle').textContent=p?'编辑提供商':'添加提供商';
-  $('pName').value=p?p.name:'';
+  $('pTemplate').value='';$('pName').value=p?p.name:'';
   $('pBase').value=p?p.base:'https://api.sensenova.cn/v1';
   $('pKey').value=p?p.key:'';
   $('pProxy').value=p?p.proxy||'':'';
@@ -744,6 +766,36 @@ $('btnSettings').onclick=()=>{
 };
 $('setTemp').oninput=()=>{$('tempVal').textContent=$('setTemp').value};
 $('settingsCancel').onclick=()=>$('settingsModal').classList.remove('open');
+// ===== 数据导出 / 导入 / 清空 =====
+$('btnExport').onclick=()=>{
+  const data={version:1,exported:new Date().toISOString(),providers:providers,activeProviderId:activeProviderId,sessions:sessions,activeSessionId:activeSessionId,mcpServers:mcpServers,plugins:plugins,builtinTools:builtinTools,settings:settings};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ai-toolbox-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);toast('已导出备份');
+};
+$('btnImport').onclick=()=>$('importFile').click();
+$('importFile').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const d=JSON.parse(reader.result);
+      if(d.providers)providers=d.providers;
+      if(d.activeProviderId)activeProviderId=d.activeProviderId;
+      if(d.sessions)sessions=d.sessions;
+      if(d.activeSessionId)activeSessionId=d.activeSessionId;
+      if(d.mcpServers)mcpServers=d.mcpServers;
+      if(d.plugins)plugins=d.plugins;
+      if(d.builtinTools)builtinTools=d.builtinTools;
+      if(d.settings)settings=Object.assign(settings,d.settings);
+      persist();renderAll();toast('✓ 导入成功');
+    }catch(err){toast('✗ 导入失败: '+err.message)}
+  };
+  reader.readAsText(f);e.target.value='';
+};
+$('btnWipe').onclick=()=>{
+  if(!confirm('确定清空全部数据？此操作不可撤销！'))return;
+  localStorage.clear();location.reload();
+};
 $('settingsSave').onclick=()=>{
   settings.temperature=parseFloat($('setTemp').value)||0.7;
   settings.maxTokens=parseInt($('setMaxTokens').value)||2048;
