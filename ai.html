@@ -285,6 +285,28 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 .sb-tool-item .n{flex:1;font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-tool-item .d{font-size:10px;color:var(--fg-faint);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-empty{font-size:12px;color:var(--fg-faint);padding:8px 4px;font-family:var(--mono)}
+/* ===== 技能与能力市场 ===== */
+.mk-item{display:flex;align-items:flex-start;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line-strong)}
+.mk-item:last-child{border-bottom:0}
+.mk-item input[type=checkbox]{margin-top:2px;accent-color:var(--acc);flex-shrink:0}
+.mk-item .mk-c{flex:1;min-width:0}
+.mk-item .mk-n{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mk-item .mk-d{font-size:11px;color:var(--fg-faint);margin-top:3px;line-height:1.5}
+.mk-badge{font-size:9px;padding:0 4px;border-radius:2px;font-family:var(--mono);border:1px solid var(--line);color:var(--fg-dim)}
+.mk-badge.skill{color:var(--acc);border-color:var(--acc)}
+.mk-badge.mcp{color:var(--warn);border-color:var(--warn)}
+.mk-badge.plugin{color:var(--ok);border-color:var(--ok)}
+.mk-note{font-size:11px;color:var(--fg-faint);margin:8px 0 4px;font-family:var(--mono)}
+.mk-bar{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.mk-scroll{max-height:44dvh;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r);padding:2px 8px;background:var(--bg)}
+.preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.sb-skill{padding:7px 4px;border-bottom:1px solid var(--line-strong)}
+.sb-skill:last-child{border-bottom:0}
+.sb-skill .sk-h{display:flex;align-items:center;gap:6px}
+.sb-skill .sk-n{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-skill .sk-d{font-size:11px;color:var(--fg-faint);margin-top:2px;line-height:1.4}
+.sb-skill .sk-p{font-size:10px;color:var(--fg-faint);font-family:var(--mono);margin-top:3px}
+@media(max-width:860px){.mk-scroll{max-height:38dvh}}
 </style>
 <body>
 <div class="topbar">
@@ -311,9 +333,11 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
       <div class="sb-sec">模块</div>
       <div class="sb-mod" data-view="chats"><span class="sb-ico">💬</span><span class="sb-t">对话</span><span class="sb-ar">›</span></div>
       <div class="sb-mod" data-view="models"><span class="sb-ico">🤖</span><span class="sb-t">模型</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="skills"><span class="sb-ico">🎯</span><span class="sb-t">技能</span><span class="sb-ar">›</span></div>
       <div class="sb-mod" data-view="plugins"><span class="sb-ico">🧩</span><span class="sb-t">插件</span><span class="sb-ar">›</span></div>
       <div class="sb-mod" data-view="mcp"><span class="sb-ico">🔌</span><span class="sb-t">MCP</span><span class="sb-ar">›</span></div>
       <div class="sb-mod" data-view="builtin"><span class="sb-ico">🛠</span><span class="sb-t">内置工具</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="market"><span class="sb-ico">🛒</span><span class="sb-t">能力市场</span><span class="sb-ar">›</span></div>
       <div class="sb-mod" data-view="settings"><span class="sb-ico">⚙</span><span class="sb-t">设置</span><span class="sb-ar">›</span></div>
       <div class="sb-sec" style="margin-top:14px">预留</div>
       <div class="sb-mod soon" data-view="kb"><span class="sb-ico">📚</span><span class="sb-t">知识库</span><span class="sb-soon">即将上线</span></div>
@@ -354,6 +378,23 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
       <section class="panel">
         <h3>BUILTIN TOOLS</h3>
         <div id="sbBuiltinList"></div>
+      </section>
+    </div>
+    <!-- 技能 -->
+    <div class="sb-view" id="sbSkills" style="display:none">
+      <section class="panel">
+        <h3>SKILLS<span class="sp"></span><button class="btn small" id="btnMarketSkill">市场</button><button class="btn small" id="btnAddSkill">添加</button></h3>
+        <div id="sbSkillList"></div>
+      </section>
+    </div>
+    <!-- 能力市场 -->
+    <div class="sb-view" id="sbMarket" style="display:none">
+      <section class="panel">
+        <h3>MARKET</h3>
+        <div class="sb-mod" data-mk="skill" style="margin:1px 0"><span class="sb-ico">🎯</span><span class="sb-t">技能市场</span><span class="sb-ar">›</span></div>
+        <div class="sb-mod" data-mk="mcp" style="margin:1px 0"><span class="sb-ico">🔌</span><span class="sb-t">MCP 市场</span><span class="sb-ar">›</span></div>
+        <div class="sb-mod" data-mk="plugin" style="margin:1px 0"><span class="sb-ico">🧩</span><span class="sb-t">插件市场</span><span class="sb-ar">›</span></div>
+        <div class="hint" style="margin-top:10px">支持 MCP 官方注册表、Smithery、PulseMCP、SKILL.md、OpenAPI 等格式，也可填入任意链接自动识别。</div>
       </section>
     </div>
     <!-- 设置 -->
@@ -413,6 +454,26 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 <div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">取消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
 <div class="modal-mask" id="pluginModal"><div class="modal"><h2>添加插件</h2><div class="form-row"><label>名称</label><input id="plName"></div><div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件</option><option value="custom">自定义 JSON 工具</option></select></div><div class="form-row"><label>OpenAPI 地址或 JSON</label><textarea id="plOpenapi" rows="4"></textarea></div><div id="customFields" style="display:none"><div class="form-row"><label>工具名称</label><input id="cName"></div><div class="form-row"><label>描述</label><input id="cDesc"></div><div class="form-row"><label>URL</label><input id="cUrl"></div><div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div><div class="form-row"><label>Headers（JSON）</label><input id="cHeaders"></div><div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3"></textarea></div></div><div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div></div></div>
 <div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoRetry429" style="width:auto"> 遇到限流(429)自动重试</label><div class="hint">仅对限流与瞬时连接错误自动重试，次数见下方。</div></div><div class="form-row"><label>自动重试次数 <span id="retryVal">5</span></label><input type="range" id="setMaxRetry" min="0" max="10" step="1" value="5"><div class="hint">设为 0 则不自动重试。退避间隔 2/4/8/16/30 秒。</div></div><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setAutoCompress" style="width:auto"> 超长对话自动压缩</label><div class="hint">接近上下文上限时，把早期对话摘要为一条记录，避免报错。</div></div><div class="form-row"><label>压缩触发阈值 <span id="cmpVal">80</span>%</label><input type="range" id="setCmpTh" min="50" max="95" step="5" value="80"><div class="hint">达到最大 Tokens 的该比例时触发压缩。</div></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清除全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
+<div class="modal-mask" id="skillModal"><div class="modal">
+  <h2 id="skillModalTitle">添加技能</h2>
+  <p class="sub">技能作为行为规范注入系统提示词，不占用工具调用。</p>
+  <div class="form-row"><label>名称</label><input id="skName" placeholder="例如：代码审查"></div>
+  <div class="form-row"><label>描述</label><input id="skDesc" placeholder="一句话说明用途"></div>
+  <div class="form-row"><label>提示词</label><textarea id="skPrompt" rows="8" placeholder="当用户提供代码时，请按以下结构回答…"></textarea></div>
+  <div class="form-actions"><button class="btn" id="skCancel">取消</button><button class="btn primary" id="skSave">保存</button></div>
+</div></div>
+<div class="modal-mask" id="marketModal"><div class="modal">
+  <h2>能力市场</h2>
+  <p class="sub" id="mkSub">填入链接或关键词，自动识别格式并安装。</p>
+  <div class="tabs" id="mkTabs"><button type="button" class="on" data-mkt="skill">技能</button><button type="button" data-mkt="mcp">MCP</button><button type="button" data-mkt="plugin">插件</button></div>
+  <div class="tab-pane on" style="padding:14px 16px">
+    <div class="form-row"><label id="mkUrlLabel">来源链接</label><input id="mkUrl" placeholder="https://registry.modelcontextprotocol.io/v0/servers"></div>
+    <div class="form-row"><label>快捷来源</label><div class="preset-row" id="mkPresets"></div></div>
+    <div class="mk-bar"><button class="btn primary small" id="mkFetch">查询</button><span id="mkStatus" class="hint" style="margin:0"></span></div>
+    <div class="form-row" style="margin-top:12px"><label>结果</label><div class="mk-scroll" id="mkResults"><div class="sb-empty">填入链接后点击查询</div></div></div>
+    <div class="form-actions"><button class="btn" id="mkSelectAll">全选</button><button class="btn" id="mkClose">关闭</button><button class="btn primary" id="mkInstall">安装选中</button></div>
+  </div>
+</div></div>
 <div class="toast" id="toast"></div>
 <script>
 // ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
@@ -501,7 +562,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 
 
 // ===== 存储 =====
-const LS_KEYS={providers:'ai.providers',active:'ai.activeProvider',sessions:'ai.sessions',activeSession:'ai.activeSession',mcp:'ai.mcpServers',plugins:'ai.plugins',builtin:'ai.builtinTools',settings:'ai.settings',activeModel:'ai.activeModel'};
+const LS_KEYS={providers:'ai.providers',active:'ai.activeProvider',sessions:'ai.sessions',activeSession:'ai.activeSession',mcp:'ai.mcpServers',plugins:'ai.plugins',builtin:'ai.builtinTools',skills:'ai.skills',settings:'ai.settings',activeModel:'ai.activeModel'};
 function load(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):(f!==undefined?f:null)}catch(e){return f!==undefined?f:null}}
 function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -519,6 +580,12 @@ const DEFAULT_BUILTIN=[
   {id:'fetch_url',name:'网页抓取',desc:'抓取指定URL文本内容',enabled:true},
   {id:'now_time',name:'当前时间',desc:'获取当前日期时间',enabled:true}
 ];
+const DEFAULT_SKILLS=[
+  {id:'sk_code_review',name:'代码审查',desc:'逐条指出问题并给出修复建议',enabled:false,
+   prompt:'当用户提供代码时，请按以下结构回复：'+String.fromCharCode(10)+'1. 总体评价（一句话）'+String.fromCharCode(10)+'2. 问题清单（按严重程度排序，每条含：问题 / 影响 / 修复建议）'+String.fromCharCode(10)+'3. 修复后的完整代码'+String.fromCharCode(10)+'只指出真实存在的问题，不要臆测。'},
+  {id:'sk_summary',name:'结构化摘要',desc:'把长文压缩为要点',enabled:false,
+   prompt:'当用户要求总结时，按以下结构输出：'+String.fromCharCode(10)+'- 一句话结论'+String.fromCharCode(10)+'- 3-5 条要点（每条不超过 40 字）'+String.fromCharCode(10)+'- 关键数据或事实（如有）'+String.fromCharCode(10)+'不要输出与原文无关的推测。'},
+];
 
 // ===== 状态 =====
 let providers=load(LS_KEYS.providers,DEFAULT_PROVIDERS);
@@ -531,6 +598,7 @@ let activeSessionId=load(LS_KEYS.activeSession,null);
 let mcpServers=load(LS_KEYS.mcp,[]);
 let plugins=load(LS_KEYS.plugins,[]);
 let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
+let skills=load(LS_KEYS.skills,DEFAULT_SKILLS);
 let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true,autoCompress:true,compressTh:80});
 // 内置公共代理（解决浏览器 CORS：商汤/OpenAI 等预检不完整）
 const BUILTIN_PROXY='https://ai.yongjiu.ccwu.cc';
@@ -542,7 +610,7 @@ let selectedModel=load(LS_KEYS.activeModel,null);
 function getProvider(id){return providers.find(p=>p.id===id)}
 function activeProvider(){return getProvider(activeProviderId)||providers[0]}
 function curSession(){return sessions.find(s=>s.id===activeSessionId)||null}
-function persist(){save(LS_KEYS.providers,providers);save(LS_KEYS.active,activeProviderId);save(LS_KEYS.sessions,sessions);save(LS_KEYS.activeSession,activeSessionId);save(LS_KEYS.mcp,mcpServers);save(LS_KEYS.plugins,plugins);save(LS_KEYS.builtin,builtinTools);save(LS_KEYS.settings,settings);save(LS_KEYS.activeModel,selectedModel)}
+function persist(){save(LS_KEYS.providers,providers);save(LS_KEYS.active,activeProviderId);save(LS_KEYS.sessions,sessions);save(LS_KEYS.activeSession,activeSessionId);save(LS_KEYS.mcp,mcpServers);save(LS_KEYS.plugins,plugins);save(LS_KEYS.skills,skills);save(LS_KEYS.builtin,builtinTools);save(LS_KEYS.settings,settings);save(LS_KEYS.activeModel,selectedModel)}
 // ===== 提供商 UI =====
 function renderProviders(){
   const el=$('providerList');const ap=activeProvider();
@@ -814,8 +882,8 @@ function patchStreamBubble(){
 }
 // ===== 左侧模块导航 =====
 let _sbCur='home';
-const SB_VIEWS={home:'sbHome',chats:'sbChats',models:'sbModels',plugins:'sbPlugins',mcp:'sbMcp',builtin:'sbBuiltin',settings:'sbSettings'};
-const SB_TITLES={home:'主菜单',chats:'对话',models:'模型',plugins:'插件',mcp:'MCP',builtin:'内置工具',settings:'设置'};
+const SB_VIEWS={home:'sbHome',chats:'sbChats',models:'sbModels',skills:'sbSkills',plugins:'sbPlugins',mcp:'sbMcp',builtin:'sbBuiltin',market:'sbMarket',settings:'sbSettings'};
+const SB_TITLES={home:'主菜单',chats:'对话',models:'模型',skills:'技能',plugins:'插件',mcp:'MCP',builtin:'内置工具',market:'能力市场',settings:'设置'};
 function showSbView(v){
   _sbCur=v;
   Object.keys(SB_VIEWS).forEach(function(k){
@@ -829,12 +897,70 @@ function showSbView(v){
   renderSbView(v);
 }
 function renderSbView(v){
-  if(v==='plugins')renderSbPlugins();
+  if(v==='skills')renderSbSkills();
+  else if(v==='market')renderSbMarket();
+  else if(v==='plugins')renderSbPlugins();
   else if(v==='mcp')renderSbMcp();
   else if(v==='builtin')renderSbBuiltin();
   else if(v==='settings')renderSbSettings();
   else if(v==='chats')renderSessions();
   else if(v==='models')renderProviders();
+}
+// ===== 技能（Skill）：注入系统提示词的能力包 =====
+function activeSkills(){return skills.filter(function(x){return x.enabled!==false;});}
+function renderSbSkills(){
+  const el=document.getElementById('sbSkillList');
+  if(!el)return;
+  el.innerHTML=skills.map(function(x){
+    return '<div class="sb-skill"><div class="sk-h"><span class="sk-n">🎯 '+esc(x.name)+'</span><label class="switch"><input type="checkbox" data-skid="'+x.id+'"'+(x.enabled!==false?' checked':'')+'><span class="slider"></span></label><button class="btn small" data-skedit="'+x.id+'">改</button><button class="btn small" data-skdel="'+x.id+'">✕</button></div><div class="sk-d">'+esc(x.desc||'')+'</div><div class="sk-p">'+esc(String(x.prompt||'').slice(0,54))+(String(x.prompt||'').length>54?'…':'')+'</div></div>';
+  }).join('')||'<div class="sb-empty">暂无技能</div>';
+  el.querySelectorAll('input').forEach(function(i){i.onchange=function(){const x=skills.find(function(v){return v.id===i.dataset.skid;});if(x)x.enabled=i.checked;persist();renderSbSkills();toast(i.checked?'技能已启用':'技能已关闭');};});
+  el.querySelectorAll('[data-skedit]').forEach(function(b){b.onclick=function(){openSkillModal(b.dataset.skedit);};});
+  el.querySelectorAll('[data-skdel]').forEach(function(b){b.onclick=function(){skills=skills.filter(function(x){return x.id!==b.dataset.skdel;});persist();renderSbSkills();toast('已删除');};});
+}
+function renderSbMarket(){
+  const el=document.getElementById('sbMarket');
+  if(!el)return;
+  el.querySelectorAll('[data-mk]').forEach(function(n){
+    n.onclick=function(){openMarket(n.dataset.mk);};
+  });
+}
+// 技能编辑弹窗
+function openSkillModal(id){
+  const x=id?skills.find(function(v){return v.id===id;}):null;
+  document.getElementById('skillModalTitle').textContent=x?'编辑技能':'添加技能';
+  document.getElementById('skName').value=x?x.name:'';
+  document.getElementById('skDesc').value=x?x.desc||'':'';
+  document.getElementById('skPrompt').value=x?x.prompt||'':'';
+  document.getElementById('skillModal').dataset.skid=x?x.id:'';
+  document.getElementById('skillModal').classList.add('open');
+}
+function initSkillUI(){
+  const a=document.getElementById('btnAddSkill');
+  if(a)a.onclick=function(){openSkillModal(null);};
+  const m=document.getElementById('btnMarketSkill');
+  if(m)m.onclick=function(){openMarket('skill');};
+  const c=document.getElementById('skCancel');
+  if(c)c.onclick=function(){document.getElementById('skillModal').classList.remove('open');};
+  const sv=document.getElementById('skSave');
+  if(sv)sv.onclick=function(){
+    const name=document.getElementById('skName').value.trim();
+    const desc=document.getElementById('skDesc').value.trim();
+    const prompt=document.getElementById('skPrompt').value.trim();
+    if(!name||!prompt){toast('名称和提示词必填');return;}
+    const sid=document.getElementById('skillModal').dataset.skid;
+    if(sid){const x=skills.find(function(v){return v.id===sid;});if(x){x.name=name;x.desc=desc;x.prompt=prompt;}}
+    else{skills.push({id:uid(),name:name,desc:desc,prompt:prompt,enabled:true});}
+    persist();document.getElementById('skillModal').classList.remove('open');
+    renderSbSkills();toast('已保存');
+  };
+}
+// 把已启用技能拼接到系统提示词末尾
+function buildSkillPrompt(){
+  const list=activeSkills();
+  if(!list.length)return '';
+  const parts=list.map(function(x,i){return '### '+(i+1)+'. '+x.name+(x.desc?('（'+x.desc+'）'):'')+String.fromCharCode(10)+String(x.prompt||'');});
+  return '你已启用以下技能，请在回答时遵循对应的行为规范：'+String.fromCharCode(10)+String.fromCharCode(10)+parts.join(String.fromCharCode(10)+String.fromCharCode(10));
 }
 function renderSbPlugins(){
   const el=document.getElementById('sbPluginList');
@@ -887,6 +1013,248 @@ function initSbNav(){
   if(am2)am2.onclick=function(){document.getElementById('btnAddMcp').click();};
 }
 initSbNav();
+// ===== 能力市场（Skill / MCP / Plugin） =====
+const MARKET_PRESETS={
+  skill:[
+    {n:`内置示例包`,u:`builtin:skills`},
+    {n:`SKILL.md 示例`,u:`https://raw.githubusercontent.com/anthropics/skills/main/README.md`}
+  ],
+  mcp:[
+    {n:`MCP 官方注册表`,u:`https://registry.modelcontextprotocol.io/v0/servers`},
+    {n:`PulseMCP`,u:`https://api.pulsemcp.com/v0beta/servers`},
+    {n:`Smithery`,u:`https://registry.smithery.ai/servers`},
+    {n:`粘贴 mcpServers JSON`,u:`{"mcpServers":{"示例":{"url":"https://mcp.example.com/mcp"}}}`}
+  ],
+  plugin:[
+    {n:`OpenAPI 示例(Petstore)`,u:`https://petstore3.swagger.io/api/v3/openapi.json`},
+    {n:`内置示例包`,u:`builtin:plugins`}
+  ]
+};
+let _mkType=`skill`,_mkCands=[];
+function mkPick(o,keys){for(let i=0;i<keys.length;i++){const k=keys[i];if(o&&o[k]!==undefined&&o[k]!==null&&String(o[k]).length)return String(o[k]);}return ``;}
+function mkName(o){return mkPick(o,[`name`,`title`,`id`,`serverName`,`fullName`,`slug`,`qualifiedName`])||`未命名`;}
+function mkDesc(o){return mkPick(o,[`description`,`desc`,`summary`,`overview`])||``;}
+function mkList(j){
+  if(Array.isArray(j))return j;
+  const keys=[`servers`,`data`,`items`,`results`,`tools`,`plugins`,`skills`,`entries`,`values`];
+  for(const k of keys){if(j&&Array.isArray(j[k]))return j[k];}
+  return [j];
+}
+function mkFromItem(it,t){
+  if(!it||typeof it!==`object`)return null;
+  if(it.server&&typeof it.server===`object`)it=Object.assign({},it.server,{_outer:it});
+  const c={type:t,name:mkName(it),desc:mkDesc(it)};
+  if(t===`skill`){
+    c.prompt=mkPick(it,[`prompt`,`content`,`instructions`,`body`,`text`,`markdown`]);
+    if(!c.prompt)return null;
+  }else if(t===`mcp`){
+    let u=mkPick(it,[`url`,`endpoint`,`serverUrl`,`baseUrl`]);
+    if(!u&&Array.isArray(it.remotes)&&it.remotes[0])u=mkPick(it.remotes[0],[`url`]);
+    if(!u&&Array.isArray(it.connections)&&it.connections[0])u=mkPick(it.connections[0],[`url`]);
+    if(!u)return null;
+    c.url=u;
+    const hd=it.headers||it.authorization;
+    if(hd&&typeof hd===`object`){
+      if(hd.Authorization)c.token=String(hd.Authorization).replace(/^Bearer\s+/i,``);
+      else c.headers=JSON.stringify(hd);
+    }
+  }else{
+    c.openapi=JSON.stringify(it);
+  }
+  return c;
+}
+function mkParse(text,t,url){
+  const out=[];const raw=String(text||``).trim();
+  if(!raw)return out;
+  // SKILL.md：YAML front-matter
+  if(raw.indexOf(`---`)===0){
+    const m=raw.match(/^---\s*[\r\n]+([\s\S]*?)[\r\n]+---([\s\S]*)$/);
+    if(m){
+      const fm={};
+      m[1].split(/\r?\n/).forEach(function(ln){
+        const i=ln.indexOf(`:`);if(i<0)return;
+        fm[ln.slice(0,i).trim()]=ln.slice(i+1).trim().replace(/^["']|["']$/g,``);
+      });
+      const c=mkFromItem({name:fm.name||fm.title,description:fm.description,prompt:m[2].trim()},`skill`);
+      if(c)out.push(c);
+      return out;
+    }
+  }
+  let j=null;
+  try{j=JSON.parse(raw);}catch(e){}
+  if(j===null||j===undefined){
+    // 纯文本：整体作为技能提示词
+    if(t===`skill`){
+      const first=raw.split(/\r?\n/)[0].replace(/^#+\s*/,``).trim();
+      const c=mkFromItem({name:first.slice(0,40)||`导入技能`,description:`来自 ${url}`,prompt:raw},`skill`);
+      if(c)out.push(c);
+    }
+    return out;
+  }
+  // OpenAPI / Swagger 整体识别
+  if(j.paths&&(j.openapi||j.swagger)){
+    const c=mkFromItem({name:j.info&&j.info.title||`OpenAPI 插件`,description:j.info&&j.info.description,prompt:null},`plugin`);
+    if(c){c.openapi=raw;out.push(c);}
+    return out;
+  }
+  // Claude Desktop / Cursor 风格的 mcpServers 对象
+  if(t==='mcp'&&j&&j.mcpServers&&typeof j.mcpServers==='object'){
+    Object.keys(j.mcpServers).forEach(function(k){
+      const v=j.mcpServers[k]||{};
+      const c=mkFromItem({name:k,url:v.url||v.endpoint,headers:v.headers,description:v.description},'mcp');
+      if(c)out.push(c);
+    });
+    if(out.length)return out;
+  }
+  mkList(j).forEach(function(it){const c=mkFromItem(it,t);if(c)out.push(c);});
+  return out;
+}
+async function mkFetch(url){
+  const tries=[url,`https://api.allorigins.win/raw?url=`+encodeURIComponent(url)];
+  let last=``;
+  for(const u of tries){
+    try{
+      const r=await fetch(u,{cache:`no-store`});
+      if(!r.ok){last=`HTTP `+r.status;continue;}
+      return await r.text();
+    }catch(e){last=String(e&&e.message||e);}
+  }
+  throw new Error(last||`请求失败`);
+}
+function mkBuiltinSkills(){
+  const N=String.fromCharCode(10);
+  return [
+    {type:'skill',name:'翻译润色',desc:'中英互译并保持语气',prompt:'当用户要求翻译时：'+N+'1. 先给译文，不加解释'+N+'2. 再给 1-2 条用词说明（如有歧义）'+N+'保留原文的段落结构与专有名词。'},
+    {type:'skill',name:'表格整理',desc:'把杂乱内容整理为 Markdown 表格',prompt:'当用户提供散乱信息时，用 Markdown 表格输出，包含表头与对齐；缺失字段填短横线，不要编造数据。'},
+    {type:'skill',name:'演示大纲',desc:'生成章节化大纲',prompt:'生成大纲时按 封面/目录/背景/核心内容（3-5 章，每章 3 条要点）/结论 结构输出，每章标注建议时长。'},
+    {type:'skill',name:'纠错校对',desc:'只修正错误，不改写风格',prompt:'校对时仅修正错别字、标点、语法与事实性错误；保留原文语气与排版，改动处用列表汇总说明。'},
+    {type:'skill',name:'需求拆解',desc:'把模糊需求转为可执行清单',prompt:'收到需求后先输出：目标/约束/输入输出/验收标准/待确认问题。若信息不足，最多提 3 个关键问题，不要反复追问。'},
+    {type:'skill',name:'命名助手',desc:'变量与函数命名建议',prompt:'给出命名建议时，同时提供 3 个候选及适用场景；遵循所在语言的惯用风格。'}
+  ];
+}
+function mkBuiltinPlugins(){
+  const p1={openapi:'3.0.0',info:{title:'JSONPlaceholder',description:'公开测试 API'},servers:[{url:'https://jsonplaceholder.typicode.com'}],paths:{}};
+  p1.paths['/posts']={get:{operationId:'listPosts',summary:'获取文章列表',parameters:[{name:'_limit',in:'query',required:false,schema:{type:'integer'},description:'返回条数上限'}]}};
+  p1.paths['/posts/{id}']={get:{operationId:'getPost',summary:'获取单篇文章',parameters:[{name:'id',in:'path',required:true,schema:{type:'integer'}}]}};
+  const p2={openapi:'3.0.0',info:{title:'httpbin',description:'HTTP 测试工具'},servers:[{url:'https://httpbin.org'}],paths:{}};
+  p2.paths['/get']={get:{operationId:'httpGet',summary:'回显 GET 参数',parameters:[{name:'q',in:'query',required:false,schema:{type:'string'},description:'任意参数'}]}};
+  return [
+    {type:'plugin',name:'JSONPlaceholder',desc:'公开测试 API，含文章与用户',openapi:JSON.stringify(p1)},
+    {type:'plugin',name:'httpbin',desc:'请求回显与测试',openapi:JSON.stringify(p2)}
+  ];
+}
+function renderSbMarketTabs(t){
+  const bs=document.querySelectorAll('#mkTabs button');
+  Array.prototype.forEach.call(bs,function(b){b.classList.toggle('on',b.dataset.mkt===t);});
+  const lbl=document.getElementById('mkUrlLabel');
+  if(lbl)lbl.textContent=(t==='skill')?'技能来源（SKILL.md / Markdown / JSON）':(t==='mcp'?'MCP 来源（注册表 API / mcpServers JSON）':'插件来源（OpenAPI / JSON）');
+  const inp=document.getElementById('mkUrl');
+  if(inp)inp.placeholder=(t==='skill')?'https://example.com/SKILL.md':(t==='mcp'?'https://registry.modelcontextprotocol.io/v0/servers':'https://petstore3.swagger.io/api/v3/openapi.json');
+  const box=document.getElementById('mkPresets');
+  if(box){
+    const ps=MARKET_PRESETS[t]||[];
+    box.innerHTML=ps.map(function(p,i){return '<button class="btn small" data-pk="'+i+'">'+esc(p.n)+'</button>';}).join('');
+    const bs2=box.querySelectorAll('[data-pk]');
+    Array.prototype.forEach.call(bs2,function(b){b.onclick=function(){const i2=document.getElementById('mkUrl');if(i2)i2.value=ps[Number(b.dataset.pk)].u;};});
+  }
+  _mkType=t;_mkCands=[];
+  const res=document.getElementById('mkResults');
+  if(res)res.innerHTML='<div class="sb-empty">填入链接后点击查询</div>';
+}
+function openMarket(t){
+  _mkType=t||'skill';
+  renderSbMarketTabs(_mkType);
+  const st=document.getElementById('mkStatus');if(st)st.textContent='';
+  document.getElementById('marketModal').classList.add('open');
+}
+function mkRenderResults(){
+  const box=document.getElementById('mkResults');
+  if(!box)return;
+  if(!_mkCands.length){box.innerHTML='<div class="sb-empty">未解析到可用条目</div>';return;}
+  box.innerHTML=_mkCands.map(function(c,i){
+    const t=c.type||_mkType;
+    const sub=(t==='mcp')?esc(c.url||''):(t==='skill'?esc(String(c.prompt||'').slice(0,70)):'OpenAPI 定义');
+    return '<div class="mk-item"><input type="checkbox" data-mki="'+i+'" checked><div class="mk-c"><div class="mk-n">'+esc(c.name)+'<span class="mk-badge '+t+'">'+t.toUpperCase()+'</span></div><div class="mk-d">'+esc(c.desc||'')+'</div><div class="mk-d" style="font-family:var(--mono);opacity:.75">'+sub+'</div></div></div>';
+  }).join('');
+}
+async function mkDoFetch(){
+  const inp=document.getElementById('mkUrl');
+  const st=document.getElementById('mkStatus');
+  const url=(inp&&inp.value||'').trim();
+  if(!url){toast('请先填入链接');return;}
+  _mkCands=[];
+  if(st){st.style.color='';st.textContent='查询中…';}
+  try{
+    if(url==='builtin:skills'){
+      if(_mkType!=='skill'){toast('该来源仅适用于技能');if(st)st.textContent='';return;}
+      _mkCands=mkBuiltinSkills();
+    }else if(url==='builtin:plugins'){
+      if(_mkType!=='plugin'){toast('该来源仅适用于插件');if(st)st.textContent='';return;}
+      _mkCands=mkBuiltinPlugins();
+    }else if(url.charAt(0)==='{'||url.charAt(0)==='['){
+      try{JSON.parse(url);}catch(e){throw new Error('JSON 格式错误');}
+      _mkCands=mkParse(url,_mkType,'inline');
+    }else if(url.indexOf('http:')===0||url.indexOf('https:')===0){
+      const text=await mkFetch(url);
+      _mkCands=mkParse(text,_mkType,url);
+    }else{
+      throw new Error('请输入 http(s) 链接或粘贴 JSON');
+    }
+    mkRenderResults();
+    if(st)st.textContent=_mkCands.length?('✓ 解析到 '+_mkCands.length+' 项'):'未解析到条目';
+  }catch(e){
+    if(st){st.style.color='var(--danger)';st.textContent='✗ '+String((e&&e.message)||e);}
+    mkRenderResults();
+  }
+}
+function mkInstall(){
+  const box=document.getElementById('mkResults');
+  if(!box||!_mkCands.length){toast('没有可安装的条目');return;}
+  const cs=box.querySelectorAll('input[data-mki]');
+  const sel=[];
+  Array.prototype.forEach.call(cs,function(c){if(c.checked)sel.push(_mkCands[Number(c.dataset.mki)]);});
+  if(!sel.length){toast('请先勾选要安装的条目');return;}
+  let n=0;const newMcp=[];
+  sel.forEach(function(c){
+    if(!c)return;
+    const t=c.type||_mkType;
+    if(t==='skill'){
+      skills.push({id:uid(),name:c.name,desc:c.desc||'',prompt:c.prompt,enabled:true});n++;
+    }else if(t==='mcp'){
+      if(mcpServers.some(function(x){return x.url===c.url;}))return;
+      const rec={id:uid(),name:c.name,url:c.url,token:c.token||'',headers:c.headers||'',enabled:true,tools:[]};
+      mcpServers.push(rec);newMcp.push(rec.id);n++;
+    }else{
+      const p=parseOpenapiSpec(c.openapi||'');
+      if(!p||p.error)return;
+      plugins.push({id:uid(),name:c.name,type:'openapi',openapi:c.openapi,enabled:true,_parsedTools:p.tools});n++;
+    }
+  });
+  persist();
+  if(_sbCur==='skills')renderSbSkills();
+  if(_sbCur==='plugins')renderSbPlugins();
+  if(_sbCur==='mcp')renderSbMcp();
+  updateStatus();
+  toast('已安装 '+n+' 项');
+  newMcp.forEach(function(id){setTimeout(function(){loadMcpTools(id);},300);});
+}
+function initMarketUI(){
+  const bs=document.querySelectorAll('#mkTabs button');
+  Array.prototype.forEach.call(bs,function(b){b.onclick=function(){renderSbMarketTabs(b.dataset.mkt);};});
+  const f1=document.getElementById('mkFetch');if(f1)f1.onclick=mkDoFetch;
+  const f2=document.getElementById('mkInstall');if(f2)f2.onclick=mkInstall;
+  const f3=document.getElementById('mkClose');if(f3)f3.onclick=function(){document.getElementById('marketModal').classList.remove('open');};
+  const f4=document.getElementById('mkSelectAll');
+  if(f4)f4.onclick=function(){
+    const box=document.getElementById('mkResults');if(!box)return;
+    const cs=box.querySelectorAll('input[data-mki]');
+    let all=true;
+    Array.prototype.forEach.call(cs,function(c){if(!c.checked)all=false;});
+    Array.prototype.forEach.call(cs,function(c){c.checked=!all;});
+  };
+}
+initSkillUI();
+initMarketUI();
 function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();updateCtxBar();if(_sbCur&&_sbCur!=='home')renderSbView(_sbCur);}
 
 // ===== 工具/MCP/插件管理 UI =====
@@ -968,19 +1336,22 @@ function describeTools(tools){
   return tools.map(t=>"- "+t.function.name+"："+(t.function.description||"")).join("\n");
 }
 function buildSystemPrompt(userSys,tools){
-  const base=userSys||"你是一个有用的 AI 助手。";
-  if(!tools||!tools.length)return base;
-  const list=describeTools(tools);
-  const head=[
-    "你是一个可以直接调用工具的工作型 AI。",
-    "当问题需要实时信息、外部数据或实际动作时，优先调用下面的工具，而不是回答“我无法访问”。",
-    "工具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。",
-    "你可以分析问题、决定调用哪个工具、根据返回结果继续推理。",
-    "",
-    "你当前可用的工具：",
-    list
-  ].join("\n");
-  return head+"\n\n"+base;
+  const sk=buildSkillPrompt();
+  const base=userSys||'你是一个有用的 AI 助手。';
+  const hasTools=!!(tools&&tools.length);
+  if(!hasTools&&!sk)return base;
+  const segs=[];
+  if(hasTools){
+    segs.push('你是一个可以直接调用工具的工作型 AI。');
+    segs.push('当问题需要实时信息、外部数据或实际动作时，优先调用下面的工具，而不是回答“我无法访问”。');
+    segs.push('工具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。');
+    segs.push('你可以分析问题、决定调用哪个工具、根据返回结果继续推理。');
+    segs.push('');
+    segs.push('你当前可用的工具：');
+    segs.push(describeTools(tools));
+  }
+  if(sk){if(segs.length)segs.push('');segs.push(sk);}
+  return segs.join(NL)+NL+NL+base;
 }
 function collectTools(){
   const tools=[];
@@ -1559,7 +1930,7 @@ $('setTemp').oninput=()=>{$('tempVal').textContent=$('setTemp').value};
 $('settingsCancel').onclick=()=>$('settingsModal').classList.remove('open');
 // ===== 数据导出 / 导入 / 清空 =====
 $('btnExport').onclick=()=>{
-  const data={version:1,exported:new Date().toISOString(),providers:providers,activeProviderId:activeProviderId,sessions:sessions,activeSessionId:activeSessionId,mcpServers:mcpServers,plugins:plugins,builtinTools:builtinTools,settings:settings};
+  const data={version:2,exported:new Date().toISOString(),providers:providers,activeProviderId:activeProviderId,sessions:sessions,activeSessionId:activeSessionId,mcpServers:mcpServers,plugins:plugins,builtinTools:builtinTools,skills:skills,settings:settings};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ai-toolbox-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);toast('已导出备份');
 };
@@ -1577,6 +1948,7 @@ $('importFile').onchange=e=>{
       if(d.mcpServers)mcpServers=d.mcpServers;
       if(d.plugins)plugins=d.plugins;
       if(d.builtinTools)builtinTools=d.builtinTools;
+      if(d.skills)skills=d.skills;
       if(d.settings)settings=Object.assign(settings,d.settings);
       persist();renderAll();toast('✓ 导入成功');
     }catch(err){toast('✗ 导入失败: '+err.message)}
