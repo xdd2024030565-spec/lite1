@@ -151,7 +151,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
       <div class="form-row"><label>API Key</label><input id="pKey" type="password" placeholder="sk-..."></div>
     </div>
     <div class="tab-pane" id="p-model">
-      <div class="form-row"><label>模型（逗号分���）</label><input id="pModels" placeholder="sensenova-6.8-flash-lite, deepseek-v4-flash"></div>
+      <div class="form-row"><label>模型（逗号�����）</label><input id="pModels" placeholder="sensenova-6.8-flash-lite, deepseek-v4-flash"></div>
       <div class="form-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn small" id="btnFetchModels" type="button">拉取模型</button><button class="btn small" id="btnTestConn" type="button">测试连接</button><span id="fetchModelsStatus" class="hint" style="margin:0"></span></div>
       <div class="form-row"><label>默认系统提示词</label><textarea id="pSys" rows="3" placeholder="你是一个有用的 AI 助手"></textarea></div>
     </div>
@@ -173,7 +173,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 </div>
 <div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">��消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
 <div class="modal-mask" id="pluginModal"><div class="modal"><h2>添加插件</h2><div class="form-row"><label>名称</label><input id="plName"></div><div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件</option><option value="custom">自定义 JSON 工具</option></select></div><div class="form-row"><label>OpenAPI 地址或 JSON</label><textarea id="plOpenapi" rows="4"></textarea></div><div id="customFields" style="display:none"><div class="form-row"><label>工具名称</label><input id="cName"></div><div class="form-row"><label>描述</label><input id="cDesc"></div><div class="form-row"><label>URL</label><input id="cUrl"></div><div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div><div class="form-row"><label>Headers（JSON）</label><input id="cHeaders"></div><div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3"></textarea></div></div><div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div></div></div>
-<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清空全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
+<div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清��全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
 // ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
@@ -196,7 +196,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
     try{ localStorage.setItem('gw_custom_'+service, url||''); }catch(e){}
   }
 
-  // 健康检查：GET /health 或根路��，3 秒超时
+  // ���康检查：GET /health 或根路��，3 秒超时
   function test(url){
     return new Promise(function(resolve){
       var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -432,7 +432,7 @@ function renderMsgs(){
   if(!s){el.innerHTML='<div class="empty"><div class="big">✦</div><h2>开始一次对话</h2>选择左侧模型，或先添加提供商<br><button class="btn primary" style="margin-top:14px" onclick="newSession()">新对话</button></div>';return}
   el.innerHTML=s.messages.map((m,__i)=>{
     if(m.role==='system')return '';
-    if(m._error){return '<div class="msg"><div class="role">系统</div><div class="bubble" style="border-color:var(--danger)">'+esc(m.content||'')+'<div style="display:flex;gap:8px;margin-top:10px"><button class="btn small" onclick="retryLast()">重试</button><button class="btn small primary" onclick="continueLast()">继续生成</button></div></div></div>';}
+
     if(m.role==='tool'){
       return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap">'+esc(String(m.content||'').slice(0,2000))+'</div></div>';
     }
@@ -443,7 +443,9 @@ function renderMsgs(){
     let reasoningHtml='';
     if(m.reasoning){reasoningHtml='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>🤔 思考过程 ('+Math.round(m.reasoning.length/100)/10+'k 字)</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
     const bubbleId=m._streaming?' id="streamBubble"':'';
-    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+reasoningHtml+md(m.content||'')+'</div></div>';
+    const noticeHtml=m._notice?'<div class="hint" style="color:var(--fg2);margin-bottom:6px">'+esc(m._notice)+'</div>':'';
+    const errHtml=m._error?('<div class="hint" style="color:var(--danger);margin-top:8px">'+esc(m._errText||'')+'</div><div style="margin-top:8px"><button class="btn small" onclick="retryThis()">重试</button></div>'):'';
+    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+noticeHtml+reasoningHtml+md(m.content||'')+errHtml+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
@@ -479,7 +481,8 @@ function patchStreamBubble(){
   if(!m)return;
   let pre='';
   if(m.reasoning){pre='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>思考中…</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
-  el.innerHTML=pre+md(m.content||'');
+  const notice=m._notice?'<div class="hint" style="display:flex;align-items:center;gap:6px;color:var(--fg2);margin-bottom:6px">'+esc(m._notice)+'</div>':'';
+  el.innerHTML=notice+pre+md(m.content||'');
   const box=document.getElementById('msgs');
   if(box)box.scrollTop=box.scrollHeight;
 }
@@ -571,7 +574,7 @@ function buildSystemPrompt(userSys,tools){
     "你是一个可以直接调用工具的工作型 AI。",
     "当问题需要实时信息、外部数据或实际动作时，优先调用下面的工具，而不是回答“我无法访问”。",
     "工具调用由系统自动执行，你只需发起调用；拿到结果后再给出最终回答。",
-    "你可以分析问题、决定调用哪个工具、根据返回结果继续推理。",
+    "你可以分析问题、决定调用哪个工具、根据返回结果继���推理。",
     "",
     "你当前可用的工具：",
     list
@@ -868,6 +871,35 @@ async function chatStreamFull(messages,onDelta,tools){
   if(buf)handleLine(buf);
   return {content:full,reasoning:reasoning,toolCalls:toolCalls.filter(Boolean)};
 }
+// ===== 错误分类与自动重试 =====
+// 能否自动重试：限流、瞬时网络、服务端 5xx
+function isRetriable(msg){
+  const m=String(msg||"");
+  if(/HTTP 401|HTTP 403|未设置 API Key|未配置提供商|HTTP 404/.test(m))return false;
+  if(/429|rate_limit|tpm|rpm|限流|too many requests/i.test(m))return true;
+  if(/500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|ECONNABORTED|timeout|超时|socket/i.test(m))return true;
+  return false;
+}
+// 退避秒数：2,4,8,16,30
+function backoffDelay(attempt){
+  const seq=[2,4,8,16,30];
+  return seq[Math.min(attempt,seq.length-1)];
+}
+const MAX_RETRY=5;
+function sleep(ms){
+  return new Promise(res=>{
+    const t=setInterval(()=>{
+      if(stopFlag){clearInterval(t);res("aborted");}
+    },120);
+    setTimeout(()=>{clearInterval(t);res("done");},ms);
+  });
+}
+// 把状态写进当前气泡（不新建消息）
+function setStreamNotice(s,text){
+  const m=s.messages.find(x=>x.role==="assistant"&&x._streaming);
+  if(m){m._notice=text;}
+  patchStreamBubble();
+}
 // ===== 对话主循环 =====
 let sending=false;
 let stopFlag=false;
@@ -888,7 +920,11 @@ async function runCompletion(){
     const msgs=s.messages.filter(m=>m.role!=="system"||m===s.messages[0]);
     let loop=0;
     while(loop<6&&!stopFlag){
-      const partial=await chatStreamFull(msgs,(full,reasoningText)=>{
+      if(stopFlag)break;
+      let partial=null,retries=0;
+      while(true){
+        try{
+          partial=await chatStreamFull(msgs,(full,reasoningText)=>{
         let existing=s.messages.find(m=>m.role==="assistant"&&m._streaming);
         if(!existing){
           s.messages.push({role:"assistant",content:full,reasoning:reasoningText||"",_streaming:true});
@@ -902,7 +938,30 @@ async function runCompletion(){
         if(reasoningText)existing.reasoning=reasoningText;
         _streamDirty=true;
         renderStreamThrottled();
-      },tools);
+          },tools);
+          break; // 成功，跳出重试
+        }catch(err){
+          const em=String((err&&err.message)||err||"未知错误");
+          if(!isRetriable(em)||retries>=MAX_RETRY||stopFlag){
+            throw err; // 不可重试或已达上限
+          }
+          const wait=backoffDelay(retries);
+          retries++;
+          // 保留已产出内容，在同一气泡内提示重试
+          let cnt=wait;
+          setStreamNotice(s,"连接不稳定，"+wait+" 秒后自动重试（"+retries+"/"+MAX_RETRY+"）");
+          const tick=setInterval(()=>{
+            cnt--;
+            if(cnt>0&&!stopFlag)setStreamNotice(s,"连接不稳定，"+cnt+" 秒后自动重试（"+retries+"/"+MAX_RETRY+"）");
+          },1000);
+          const st=await sleep(wait*1000);
+          clearInterval(tick);
+          if(st==="aborted"||stopFlag)throw err;
+          setStreamNotice(s,"正在重试（"+retries+"/"+MAX_RETRY+"）…");
+        }
+      }
+      const m2=s.messages.find(x=>x.role==="assistant"&&x._streaming);
+      if(m2)m2._notice="";
       s.messages=s.messages.filter(m=>!(m._streaming));
       if(partial.content||partial.reasoning){s.messages.push({role:"assistant",content:partial.content||"",reasoning:partial.reasoning||""});}
       const tcs=partial.toolCalls||[];
@@ -923,13 +982,19 @@ async function runCompletion(){
     }
   }catch(e){
     const pm=s.messages.find(m=>m.role==="assistant"&&m._streaming);
-    const kept=pm?(pm.content||""):"";
-    const keptR=pm?(pm.reasoning||""):"";
-    s.messages=s.messages.filter(m=>!(m._streaming));
-    if(kept)s.messages.push({role:"assistant",content:kept,reasoning:keptR});
     const raw=String((e&&e.message)||e||"未知错误");
-    const kind=/HTTP 401|HTTP 403|未设置 API Key|未配置/.test(raw)?"配置错误":(/(500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|timeout|超时)/i.test(raw)?"网络或服务异常":"其他错误");
-    s.messages.push({role:"assistant",content:"⚠️ "+kind+"："+raw,_error:true});
+    const cfg=/HTTP 401|HTTP 403|未设置 API Key|未配置提供商/.test(raw);
+    if(pm){
+      // 原地收尾：同一条消息，不新建气泡
+      pm._streaming=false;
+      pm._notice="";
+      pm._error=true;
+      pm._errText=cfg?("请求未通过："+raw):("已自动重试 "+MAX_RETRY+" 次仍未成功："+raw);
+      if(!pm.content)pm.content=cfg?"无法继续此条回复。":"（重试多次仍失败）";
+    }else{
+      // 完全没有产出时才建一条，并直接标错
+      s.messages.push({role:"assistant",content:cfg?"无法开始本次回复。":"（重试多次仍失败）",_error:true,_errText:cfg?("请求未通过："+raw):("已自动重试 "+MAX_RETRY+" 次仍未成功："+raw)});
+    }
     lastError=raw;
   }
   sending=false;
@@ -944,6 +1009,27 @@ async function sendMessage(){
   if(!s){newSession();s=curSession();}
   s.messages.push({role:"user",content:text});
   inp.value="";autoGrow();
+  renderMsgs();
+  await runCompletion();
+}
+// 原地重试：清理最后一条失败消息，直接在原位置重来
+async function retryThis(){
+  const st=curSession();
+  if(!st||sending)return;
+  for(let i=st.messages.length-1;i>=0;i--){
+    const m=st.messages[i];
+    if(m.role==="assistant"&&m._error){
+      // 有内容就保留重来，没内容则移除
+      if(m.content&&m.content!=="（重试多次仍失败）"&&m.content!=="无法继续此条回复。"&&m.content!=="无法开始本次回复。"){
+        delete m._error;delete m._errText;
+        m.content="";
+      }else{
+        st.messages.splice(i,1);
+        // 连带的空 assistant 也清掉，保持上下文干净
+      }
+      break;
+    }
+  }
   renderMsgs();
   await runCompletion();
 }
