@@ -3,27 +3,562 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>AI</title>
+<title>AI 工具箱</title>
 <style>
-:root{--bg:#fff;--bg2:#f5f5f7;--fg:#1a1a1a;--fg2:#86868b;--border:#d2d2d7;--accent:#0071e3;--accent-bg:rgba(0,113,227,.08);--radius:12px;--maxw:720px;--ease:cubic-bezier(.2,.8,.2,1)}
-@media(prefers-color-scheme:dark){:root[data-theme=auto]{--bg:#000;--bg2:#1c1c1e;--fg:#f5f5f7;--fg2:#86868b;--border:#38383a;--accent:#0a84ff;--accent-bg:rgba(10,132,255,.15)}}
-:root[data-theme=dark]{--bg:#000;--bg2:#1c1c1e;--fg:#f5f5f7;--fg2:#86868b;--border:#38383a;--accent:#0a84ff;--accent-bg:rgba(10,132,255,.15)}
+:root{--bg:#fff;--bg2:#f5f5f7;--fg:#1a1a1a;--fg2:#86868b;--border:#d2d2d7;--accent:#0071e3;--accent-bg:rgba(0,113,227,.08);--danger:#ff3b30;--ok:#34c759;--card:#f5f5f7;--radius:12px;--ease:cubic-bezier(.2,.8,.2,1)}
+@media(prefers-color-scheme:dark){:root[data-theme=auto]{--bg:#000;--bg2:#1c1c1e;--fg:#f5f5f7;--fg2:#86868b;--border:#38383a;--accent:#0a84ff;--accent-bg:rgba(10,132,255,.15);--danger:#ff453a;--ok:#30d158;--card:#1c1c1e}}
+:root[data-theme=dark]{--bg:#000;--bg2:#1c1c1e;--fg:#f5f5f7;--fg2:#86868b;--border:#38383a;--accent:#0a84ff;--accent-bg:rgba(10,132,255,.15);--danger:#ff453a;--ok:#30d158;--card:#1c1c1e}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;font-size:1rem;-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
-.container{max-width:var(--maxw);width:100%;text-align:center}
-.icon{font-size:3rem;margin-bottom:16px}
-.title{font-size:2rem;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
-.subtitle{font-size:1rem;color:var(--fg2);margin-bottom:32px}
-.back-link{display:inline-flex;align-items:center;gap:6px;padding:12px 24px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2);color:var(--fg);text-decoration:none;font-weight:600;transition:all .2s var(--ease)}
-.back-link:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;font-size:15px;-webkit-font-smoothing:antialiased;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;background:var(--bg2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:9px 12px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg2);color:var(--fg);font-size:13px;font-weight:600;transition:all .15s var(--ease);white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.small{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.topbar{height:52px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;z-index:50}
+.topbar .logo{font-size:20px}
+.topbar h1{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.topbar .sp{flex:1}
+.layout{display:flex;flex:1;overflow:hidden}
+.sidebar{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:transform .2s var(--ease)}
+.sidebar-section{padding:10px 12px;border-bottom:1px solid var(--border)}
+.sidebar-section h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg2);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.sidebar-section h3 .sp{flex:1}
+.session-list{overflow-y:auto;flex:1;min-height:0}
+.session-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--fg);border:1px solid transparent;margin-bottom:2px}
+.session-item:hover{background:var(--card)}
+.session-item.active{background:var(--accent-bg);border-color:var(--accent)}
+.session-item .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-item .del{opacity:0;color:var(--fg2);padding:2px 4px;font-size:12px}
+.session-item:hover .del{opacity:1}
+.provider-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:2px;border:1px solid transparent}
+.provider-item:hover{background:var(--card)}
+.provider-item.active{background:var(--accent-bg);border-color:var(--accent)}
+.provider-item .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.provider-item.off .dot{background:var(--fg2)}
+.provider-item .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-sel{margin-top:6px}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.msgs{flex:1;overflow-y:auto;padding:20px 16px;scroll-behavior:smooth}
+.msg{max-width:760px;margin:0 auto 16px;display:flex;flex-direction:column}
+.msg .role{font-size:11px;font-weight:700;color:var(--fg2);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase}
+.msg .bubble{padding:11px 14px;border-radius:12px;background:var(--card);line-height:1.7;overflow-wrap:break-word;word-break:break-word}
+.msg.user{align-items:flex-end}
+.msg.user .bubble{background:var(--accent);color:#fff}
+.msg .tool-call{margin-top:6px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-family:ui-monospace,monospace;overflow-x:auto}
+.bubble pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow-x:auto;margin:8px 0;font-size:13px}
+.bubble code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:.92em;background:var(--bg);border-radius:4px;padding:1px 5px}
+.bubble pre code{background:none;padding:0}
+.bubble table{border-collapse:collapse;margin:8px 0;width:100%}
+.bubble th,.bubble td{border:1px solid var(--border);padding:6px 10px;font-size:13px}
+.bubble blockquote{border-left:3px solid var(--accent);padding-left:10px;color:var(--fg2);margin:8px 0}
+.bubble h1,.bubble h2,.bubble h3{margin:10px 0 6px}
+.bubble ul,.bubble ol{padding-left:20px;margin:6px 0}
+.bubble a{color:var(--accent)}
+.inputbar{border-top:1px solid var(--border);padding:12px 16px;background:var(--bg);flex-shrink:0}
+.inputwrap{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:flex-end}
+.inputwrap textarea{flex:1;resize:none;max-height:160px;min-height:44px;padding:12px 14px;border-radius:12px;line-height:1.5}
+.send-btn{width:44px;height:44px;border-radius:12px;background:var(--accent);border:none;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.send-btn:disabled{opacity:.4}
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:200;padding:16px}
+.modal-mask.open{display:flex}
+.modal{background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:640px;width:100%;max-height:86vh;overflow-y:auto;padding:20px}
+.modal h2{font-size:17px;margin-bottom:14px}
+.form-row{margin-bottom:12px}
+.form-row label{display:block;font-size:12px;font-weight:600;color:var(--fg2);margin-bottom:5px}
+.form-row .hint{font-size:11px;color:var(--fg2);margin-top:3px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:600}
+.chip.off{background:var(--bg2);color:var(--fg2);border:1px solid var(--border)}
+.tool-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);margin-bottom:6px;font-size:12px}
+.tool-item .n{flex:1;font-weight:600}
+.tool-item .d{font-size:11px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.switch{position:relative;width:36px;height:20px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.switch .slider{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:.2s;cursor:pointer}
+.switch .slider:before{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;transition:.2s}
+.switch input:checked+.slider{background:var(--accent)}
+.switch input:checked+.slider:before{transform:translateX(16px)}
+.empty{text-align:center;color:var(--fg2);padding:60px 20px;font-size:14px}
+.empty .big{font-size:44px;margin-bottom:12px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:.25s;z-index:300;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:720px){.sidebar{position:fixed;left:0;top:52px;bottom:0;z-index:150;transform:translateX(-105%);box-shadow:2px 0 24px rgba(0,0,0,.2)}.sidebar.open{transform:translateX(0)}.menu-btn{display:inline-flex!important}}
+.menu-btn{display:none}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:140;display:none}
+.sidebar-backdrop.open{display:block}
+@media(min-width:721px){.sidebar-backdrop{display:none!important}}
 </style>
 </head>
 <body>
-<div class="container">
-<div class="icon">🤖</div>
-<h1 class="title">AI</h1>
-<p class="subtitle">功能开发中，敬请期待</p>
-<a class="back-link" href="index.html">← 返回首页</a>
+<div class="topbar">
+  <button class="btn menu-btn" id="menuBtn">☰</button>
+  <span class="logo">🤖</span><h1>AI 工具箱</h1>
+  <span class="chip" id="statusChip">未配置</span>
+  <span class="sp"></span>
+  <button class="btn small" id="btnNew">＋ 新对话</button>
+  <button class="btn small" id="btnSettings">⚙️ 设置</button>
 </div>
+<div class="layout">
+  <div class="sidebar-backdrop" id="sbBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <h3>对话 <span class="sp"></span><button class="btn small" id="btnNew2">＋</button></h3>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+    <div class="sidebar-section">
+      <h3>提供商 <span class="sp"></span><button class="btn small" id="btnAddProvider">＋</button></h3>
+      <div id="providerList"></div>
+      <select class="model-sel" id="modelSel"></select>
+    </div>
+    <div class="sidebar-section">
+      <h3>工具 / 插件</h3>
+      <button class="btn small" style="width:100%;justify-content:center;margin-bottom:8px" id="btnManageTools">🔧 管理工具、MCP 与插件</button>
+      <div id="toolStatus"></div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="msgs" id="msgs"></div>
+    <div class="inputbar">
+      <div class="inputwrap">
+        <textarea id="input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" title="发送">➤</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 提供商编辑 -->
+<div class="modal-mask" id="providerModal">
+  <div class="modal">
+    <h2 id="providerModalTitle">添加提供商</h2>
+    <div class="form-row"><label>名称</label><input id="pName" placeholder="例如：商汤日日新"></div>
+    <div class="form-row"><label>API 地址 (baseURL)</label><input id="pBase" placeholder="https://api.sensenova.cn/v1">
+      <div class="hint">OpenAI 兼容地址，程序自动拼接 /chat/completions。直连被 CORS 拦截时可留代理。</div></div>
+    <div class="form-row"><label>API Key</label><input id="pKey" type="password" placeholder="sk-..."></div>
+    <div class="form-row"><label>代理地址 (可选，解决 CORS)</label><input id="pProxy" placeholder="例如 https://ai.yongjiu.ccwu.cc 或留空直连">
+      <div class="hint">商汤/OpenAI 官方若被浏览器 CORS 拦截，填你自己的中转地址即可。</div></div>
+    <div class="form-row"><label>模型（逗号分隔）</label><input id="pModels" placeholder="SenseChat-5, SenseChat-Turbo"></div>
+    <div class="form-row"><label>默认系统提示词</label><textarea id="pSys" rows="2" placeholder="你是一个有用的 AI 助手"></textarea></div>
+    <div class="form-actions">
+      <button class="btn danger" id="pDelete" style="display:none;margin-right:auto">删除</button>
+      <button class="btn" id="pCancel">取消</button>
+      <button class="btn primary" id="pSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 工具/MCP/插件管理 -->
+<div class="modal-mask" id="toolsModal">
+  <div class="modal">
+    <h2>工具 / MCP / 插件</h2>
+    <div class="form-row"><h3 style="font-size:13px;margin-bottom:8px">🛠 内置工具</h3>
+      <div id="builtinTools"></div></div>
+    <div class="form-row"><h3 style="font-size:13px;margin-bottom:8px">🔌 MCP 服务器 <button class="btn small" id="btnAddMcp">＋ 添加</button></h3>
+      <div id="mcpList"></div>
+      <div class="hint">支持 streamable HTTP 远程 MCP（如 https://xxx/mcp）。浏览器端仅拉取工具并调用 HTTP，不执行远端代码。</div></div>
+    <div class="form-row"><h3 style="font-size:13px;margin-bottom:8px">📦 插件 <button class="btn small" id="btnAddPlugin">＋ 添加</button></h3>
+      <div id="pluginList"></div>
+      <div class="hint">支持 LobeChat 插件（OpenAPI 型 plugin.json / OpenAPI JSON）与自定义 JSON 工具。</div></div>
+    <div class="form-actions"><button class="btn primary" id="toolsClose">完成</button></div>
+  </div>
+</div>
+
+<!-- MCP 编辑 -->
+<div class="modal-mask" id="mcpModal">
+  <div class="modal">
+    <h2>MCP 服务器</h2>
+    <div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div>
+    <div class="form-row"><label>URL</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div>
+    <div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password" placeholder="留空则无鉴权"></div>
+    <div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div>
+    <div class="form-actions"><button class="btn" id="mCancel">取消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div>
+  </div>
+</div>
+
+<!-- 插件编辑 -->
+<div class="modal-mask" id="pluginModal">
+  <div class="modal">
+    <h2>添加插件</h2>
+    <div class="form-row"><label>名称</label><input id="plName" placeholder="例如：天气插件"></div>
+    <div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件（LobeChat 风格）</option><option value="custom">自定义 JSON 工具</option></select></div>
+    <div class="form-row"><label>OpenAPI 描述 URL 或 JSON 内容</label><textarea id="plOpenapi" rows="4" placeholder="https://xxx/openapi.json 或粘贴 JSON"></textarea></div>
+    <div class="form-row" id="customFields" style="display:none">
+      <div class="form-row"><label>工具名称</label><input id="cName" placeholder="my_tool"></div>
+      <div class="form-row"><label>描述</label><input id="cDesc" placeholder="工具做什么"></div>
+      <div class="form-row"><label>URL（{param} 可被替换）</label><input id="cUrl" placeholder="https://api.example.com/weather/{city}"></div>
+      <div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div>
+      <div class="form-row"><label>Headers（JSON）</label><input id="cHeaders" placeholder='{"Authorization":"Bearer x"}'></div>
+      <div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3" placeholder='{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}'></textarea></div>
+    </div>
+    <div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// ===== 存储 =====
+const LS_KEYS={providers:'ai.providers',active:'ai.activeProvider',sessions:'ai.sessions',activeSession:'ai.activeSession',mcp:'ai.mcpServers',plugins:'ai.plugins',builtin:'ai.builtinTools',settings:'ai.settings'};
+function load(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):(f!==undefined?f:null)}catch(e){return f!==undefined?f:null}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function $(id){return document.getElementById(id)}
+let toastTimer=null;
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
+// ===== 默认数据 =====
+const DEFAULT_PROVIDERS=[
+  {id:'sensenova',name:'商汤日日新',base:'https://api.sensenova.cn/v1',key:'',proxy:'',models:['SenseChat-5','SenseChat-Turbo'],sys:'你是一个有用的 AI 助手'},
+  {id:'deepseek',name:'DeepSeek',base:'https://api.deepseek.com/v1',key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手'},
+];
+const DEFAULT_BUILTIN=[
+  {id:'web_search',name:'网页搜索',desc:'经搜索API搜索网页',enabled:true},
+  {id:'fetch_url',name:'网页抓取',desc:'抓取指定URL文本内容',enabled:true},
+  {id:'now_time',name:'当前时间',desc:'获取当前日期时间',enabled:true}
+];
+
+// ===== 状态 =====
+let providers=load(LS_KEYS.providers,DEFAULT_PROVIDERS);
+let activeProviderId=load(LS_KEYS.active,providers[0]?providers[0].id:null);
+let sessions=load(LS_KEYS.sessions,[]);
+let activeSessionId=load(LS_KEYS.activeSession,null);
+let mcpServers=load(LS_KEYS.mcp,[]);
+let plugins=load(LS_KEYS.plugins,[]);
+let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
+let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048});
+let currentProvider=null;
+function getProvider(id){return providers.find(p=>p.id===id)}
+function activeProvider(){return getProvider(activeProviderId)||providers[0]}
+function curSession(){return sessions.find(s=>s.id===activeSessionId)||null}
+function persist(){save(LS_KEYS.providers,providers);save(LS_KEYS.active,activeProviderId);save(LS_KEYS.sessions,sessions);save(LS_KEYS.activeSession,activeSessionId);save(LS_KEYS.mcp,mcpServers);save(LS_KEYS.plugins,plugins);save(LS_KEYS.builtin,builtinTools);save(LS_KEYS.settings,settings)}
+// ===== 提供商 UI =====
+function renderProviders(){
+  const el=$('providerList');const ap=activeProvider();
+  el.innerHTML=providers.map(p=>{
+    const active=p.id===ap.id;
+    return '<div class="provider-item'+(active?' active':'')+'" data-pid="'+p.id+'"><span class="dot"></span><span class="n">'+esc(p.name)+'</span><span style="font-size:11px;color:var(--fg2)">'+(p.key?'✓':'未设Key')+'</span></div>';
+  }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:8px">暂无提供商</div>';
+  el.querySelectorAll('.provider-item').forEach(it=>it.onclick=()=>{activeProviderId=it.dataset.pid;persist();renderAll();toast('已切换提供商')});
+  const ms=$('modelSel');
+  const opts=[];
+  providers.forEach(p=>{const cur=ap.id===p.id;
+    (p.models||[]).forEach(m=>opts.push('<option value="'+esc(m)+'" data-pid="'+esc(p.id)+'"'+(cur?' selected':'')+'>'+esc(p.name)+' · '+esc(m)+'</option>'));
+  });
+  ms.innerHTML=opts.join('')||'<option value="">请先添加模型</option>';
+  ms.onchange=()=>{const sel=ms.options[ms.selectedIndex];if(sel&&sel.dataset.pid){activeProviderId=sel.dataset.pid;persist();renderAll();}};
+}
+
+function openProviderModal(id){
+  const p=id?getProvider(id):null;
+  $('providerModalTitle').textContent=p?'编辑提供商':'添加提供商';
+  $('pName').value=p?p.name:'';
+  $('pBase').value=p?p.base:'https://api.sensenova.cn/v1';
+  $('pKey').value=p?p.key:'';
+  $('pProxy').value=p?p.proxy||'':'';
+  $('pModels').value=p?(p.models||[]).join(', '):'SenseChat-5, SenseChat-Turbo';
+  $('pSys').value=p?p.sys||'你是一个有用的 AI 助手':'你是一个有用的 AI 助手';
+  $('pDelete').style.display=p?'':'none';
+  $('providerModal').dataset.pid=p?p.id:'';
+  $('providerModal').classList.add('open');
+}
+$('btnAddProvider').onclick=()=>openProviderModal(null);
+$('providerList').onclick=e=>{const it=e.target.closest('.provider-item');if(it)openProviderModal(it.dataset.pid)};
+$('pCancel').onclick=()=>$('providerModal').classList.remove('open');
+$('pDelete').onclick=()=>{const pid=$('providerModal').dataset.pid;providers=providers.filter(p=>p.id!==pid);if(activeProviderId===pid)activeProviderId=providers[0]?providers[0].id:null;persist();$('providerModal').classList.remove('open');renderAll();toast('已删除')};
+$('pSave').onclick=()=>{
+  const name=$('pName').value.trim(),base=$('pBase').value.trim(),key=$('pKey').value.trim(),proxy=$('pProxy').value.trim(),models=$('pModels').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),sys=$('pSys').value.trim();
+  if(!name||!base){toast('名称和 API 地址必填');return}
+  const pid=$('providerModal').dataset.pid;
+  if(pid){const p=getProvider(pid);Object.assign(p,{name,base,key,proxy,models,sys});}
+  else{providers.push({id:uid(),name,base,key,proxy,models,sys});activeProviderId=providers[providers.length-1].id;}
+  persist();$('providerModal').classList.remove('open');renderAll();toast('已保存');
+};
+
+// ===== 会话 =====
+function renderSessions(){
+  const el=$('sessionList');
+  el.innerHTML=sessions.slice().reverse().map(s=>{
+    const a=s.id===activeSessionId;
+    const title=s.title||s.messages.find(m=>m.role==='user')?.content?.slice(0,20)||'新对话';
+    return '<div class="session-item'+(a?' active':'')+'" data-sid="'+s.id+'"><span class="t">'+esc(title)+'</span><button class="del" data-del="'+s.id+'">✕</button></div>';
+  }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:8px">暂无对话</div>';
+  el.querySelectorAll('.session-item').forEach(it=>it.onclick=e=>{
+    if(e.target.classList.contains('del')){sessions=sessions.filter(s=>s.id!==e.target.dataset.del);if(activeSessionId===e.target.dataset.del){activeSessionId=sessions[0]?sessions[0].id:null;}persist();renderAll();return}
+    activeSessionId=it.dataset.sid;persist();renderAll();
+  });
+}
+function newSession(){
+  const s={id:uid(),title:'新对话',messages:[],created:Date.now()};
+  sessions.push(s);activeSessionId=s.id;persist();renderAll();$('input').focus();
+}
+$('btnNew').onclick=newSession;$('btnNew2').onclick=newSession;
+
+// ===== 消息渲染 =====
+function renderMsgs(){
+  const s=curSession();const el=$('msgs');
+  if(!s){el.innerHTML='<div class="empty"><div class="big">🤖</div>添加提供商并开始对话<br><button class="btn primary" style="margin-top:12px" onclick="newSession()">＋ 新对话</button></div>';return}
+  el.innerHTML=s.messages.map(m=>{
+    if(m.role==='system')return '';
+    if(m.role==='tool'){
+      return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap">'+esc(String(m.content||'').slice(0,2000))+'</div></div>';
+    }
+    if(m.toolCalls&&m.toolCalls.length){
+      const calls=m.toolCalls.map(tc=>'<div class="tool-call">🔧 '+esc(tc.function.name)+'('+esc(JSON.stringify(JSON.parse(tc.function.arguments||'{}')))+')</div>').join('');
+      return '<div class="msg"><div class="role">'+esc(m.role)+'</div><div class="bubble">'+calls+'</div></div>';
+    }
+    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble">'+md(m.content||'')+'</div></div>';
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+// 简易 Markdown 渲染
+function md(t){
+  let s=esc(t);
+  s=s.replace(/```([\s\S]*?)```/g,(_,c)=>'<pre><code>'+esc(c).replace(/^\w+\n/,'')+'</code></pre>');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+  s=s.replace(/^### (.*)$/gm,'<h3>$1</h3>').replace(/^## (.*)$/gm,'<h2>$1</h2>').replace(/^# (.*)$/gm,'<h1>$1</h1>');
+  s=s.replace(/^> (.*)$/gm,'<blockquote>$1</blockquote>');
+  s=s.replace(/^- (.*)$/gm,'<li>$1</li>').replace(/^\d+\. (.*)$/gm,'<li>$1</li>');
+  s=s.replace(/\n/g,'<br>');
+  return s;
+}
+function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();}
+
+// ===== 工具/MCP/插件管理 UI =====
+function updateStatus(){
+  const p=activeProvider();
+  const chip=$('statusChip');
+  if(!p){chip.textContent='未配置';chip.className='chip off';return}
+  chip.textContent=(p.key?'✓ ':'')+p.name+(p.proxy?' · 代理':'');
+  chip.className='chip'+(p.key?'':' off');
+  const ts=$('toolStatus');
+  const bt=builtinTools.filter(t=>t.enabled).length;
+  const mc=mcpServers.filter(s=>s.enabled!==false).length;
+  const pl=plugins.filter(x=>x.enabled!==false).length;
+  ts.innerHTML='<div style="font-size:11px;color:var(--fg2)">内置 '+bt+' · MCP '+mc+' · 插件 '+pl+'</div>';
+}
+function renderToolsModal(){
+  // 内置工具
+  const be=$('builtinTools');
+  be.innerHTML=builtinTools.map(t=>{
+    return '<div class="tool-item"><span class="n">'+esc(t.name)+'</span><span class="d">'+esc(t.desc||'')+'</span><label class="switch"><input type="checkbox" data-btid="'+t.id+'"'+(t.enabled?' checked':'')+'><span class="slider"></span></label></div>';
+  }).join('');
+  be.querySelectorAll('input').forEach(i=>i.onchange=()=>{const t=builtinTools.find(x=>x.id===i.dataset.btid);if(t)t.enabled=i.checked;persist();updateStatus();});
+  // MCP
+  const me=$('mcpList');
+  me.innerHTML=mcpServers.map(s=>{
+    return '<div class="tool-item"><span class="n">🔌 '+esc(s.name)+'</span><span class="d">'+esc(s.url||'')+'</span><label class="switch"><input type="checkbox" data-mid="'+s.id+'"'+(s.enabled!==false?' checked':'')+'><span class="slider"></span></label><button class="btn small" data-mdel="'+s.id+'">✕</button></div>';
+  }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:4px">未添加 MCP 服务器</div>';
+  me.querySelectorAll('input').forEach(i=>i.onchange=()=>{const s=mcpServers.find(x=>x.id===i.dataset.mid);if(s)s.enabled=i.checked;persist();updateStatus();});
+  me.querySelectorAll('[data-mdel]').forEach(b=>b.onclick=()=>{mcpServers=mcpServers.filter(x=>x.id!==b.dataset.mdel);persist();renderToolsModal();updateStatus();});
+  // 插件
+  const pe=$('pluginList');
+  pe.innerHTML=plugins.map(x=>{
+    return '<div class="tool-item"><span class="n">📦 '+esc(x.name)+'</span><span class="d">'+esc(x.type||'')+'</span><label class="switch"><input type="checkbox" data-plid="'+x.id+'"'+(x.enabled!==false?' checked':'')+'><span class="slider"></span></label><button class="btn small" data-pldel="'+x.id+'">✕</button></div>';
+  }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:4px">未添加插件</div>';
+  pe.querySelectorAll('input').forEach(i=>i.onchange=()=>{const x=plugins.find(v=>v.id===i.dataset.plid);if(x)x.enabled=i.checked;persist();updateStatus();});
+  pe.querySelectorAll('[data-pldel]').forEach(b=>b.onclick=()=>{plugins=plugins.filter(x=>x.id!==b.dataset.pldel);persist();renderToolsModal();updateStatus();});
+}
+$('btnManageTools').onclick=()=>{renderToolsModal();$('toolsModal').classList.add('open');};
+$('toolsClose').onclick=()=>$('toolsModal').classList.remove('open');
+$('btnAddMcp').onclick=()=>{$('mcpModal').classList.add('open');$('mName').value='';$('mUrl').value='';$('mToken').value='';$('mHeaders').value='';};
+$('mCancel').onclick=()=>$('mcpModal').classList.remove('open');
+$('mSave').onclick=async()=>{
+  const name=$('mName').value.trim(),url=$('mUrl').value.trim(),token=$('mToken').value.trim(),hdrs=$('mHeaders').value.trim();
+  if(!name||!url){toast('名称和 URL 必填');return}
+  const id=uid();
+  mcpServers.push({id,name,url,token,headers:hdrs,enabled:true,tools:[]});
+  persist();$('mcpModal').classList.remove('open');renderToolsModal();updateStatus();
+  toast('已添加，尝试拉取工具…');
+  await loadMcpTools(id);
+};
+$('btnAddPlugin').onclick=()=>{$('pluginModal').classList.add('open');$('plName').value='';$('plType').value='openapi';$('plOpenapi').value='';toggleCustomFields();};
+$('plType').onchange=toggleCustomFields;
+function toggleCustomFields(){$('customFields').style.display=$('plType').value==='custom'?'':'none';}
+$('plCancel').onclick=()=>$('pluginModal').classList.remove('open');
+$('plSave').onclick=async()=>{
+  const name=$('plName').value.trim(),type=$('plType').value,openapi=$('plOpenapi').value.trim();
+  if(!name){toast('名称必填');return}
+  const x={id:uid(),name,type,enabled:true};
+  if(type==='openapi'){x.openapi=openapi;}
+  else{x.tool={name:$('cName').value.trim(),desc:$('cDesc').value.trim(),url:$('cUrl').value.trim(),method:$('cMethod').value,headers:$('cHeaders').value.trim(),schema:$('cSchema').value.trim()};}
+  plugins.push(x);persist();$('pluginModal').classList.remove('open');renderToolsModal();updateStatus();toast('已添加插件');
+};
+
+// ===== 工具执行 =====
+function collectTools(){
+  const tools=[];
+  builtinTools.filter(t=>t.enabled).forEach(t=>{
+    if(t.id==='web_search')tools.push({type:'function',function:{name:'web_search',description:'搜索网页，返回相关链接和摘要。参数 query 为搜索关键词。',parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词'}},required:['query']}}});
+    if(t.id==='fetch_url')tools.push({type:'function',function:{name:'fetch_url',description:'抓取指定 URL 的网页文本内容。参数 url 为目标网址。',parameters:{type:'object',properties:{url:{type:'string'}},required:['url']}}});
+    if(t.id==='now_time')tools.push({type:'function',function:{name:'now_time',description:'获取当前日期和时间。',parameters:{type:'object',properties:{}}}});
+  });
+  mcpServers.filter(s=>s.enabled!==false).forEach(s=>{(s.tools||[]).forEach(t=>{
+    tools.push({type:'function',function:{name:'mcp_'+s.id+'_'+t.name,description:(t.description||'')+'（通过 MCP 服务器 '+s.name+' 调用）',parameters:t.inputSchema||{type:'object',properties:{}}}});
+  });});
+  plugins.filter(x=>x.enabled!==false).forEach(x=>{
+    if(x.type==='custom'&&x.tool){
+      tools.push({type:'function',function:{name:x.tool.name,description:x.tool.desc||'',parameters:tryParse(x.tool.schema)||{type:'object',properties:{}}}});
+    }
+  });
+  return tools;
+}
+function tryParse(s){try{return JSON.parse(s)}catch(e){return null}}
+
+// 内置工具执行
+async function runTool(name,args){
+  if(name==='now_time'){return new Date().toLocaleString('zh-CN',{hour12:false})}
+  if(name==='web_search'){
+    try{
+      const q=encodeURIComponent(args.query||'');
+      const r=await fetch('https://search.yongjiu.ccwu.cc/search?q='+q+'&format=json');
+      const j=await r.json();
+      const items=(j.results||j.items||[]).slice(0,8).map(x=>{const t=x.title||'';const u=x.url||x.link||'';const s=x.snippet||x.description||'';return t+' - '+u+'\n'+s}).join('\n\n');
+      return items||'未找到结果';
+    }catch(e){return '搜索失败: '+e.message}
+  }
+  if(name==='fetch_url'){
+    try{
+      const r=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(args.url||''));
+      const t=await r.text();
+      return String(t).slice(0,6000);
+    }catch(e){return '抓取失败: '+e.message}
+  }
+  // 自定义插件工具
+  const pl=plugins.find(x=>x.enabled!==false&&x.type==='custom'&&x.tool&&x.tool.name===name);
+  if(pl&&pl.tool){
+    try{
+      let url=pl.tool.url||'';
+      Object.keys(args||{}).forEach(k=>{url=url.split('{'+k+'}').join(encodeURIComponent(String(args[k])))});
+      const hdrs=tryParse(pl.tool.headers)||{};
+      const opt={method:pl.tool.method||'GET',headers:hdrs};
+      if((pl.tool.method||'GET')==='POST')opt.body=JSON.stringify(args||{});
+      const r=await fetch(url,opt);
+      const t=await r.text();
+      return String(t).slice(0,4000);
+    }catch(e){return '插件调用失败: '+e.message}
+  }
+  // MCP 工具
+  const mcpMatch=name.match(/^mcp_(.+?)_(.+)$/);
+  if(mcpMatch){
+    const s=mcpServers.find(x=>x.id===mcpMatch[1]);
+    if(s){return await callMcpTool(s,mcpMatch[2],args)}
+  }
+  return '未知工具: '+name;
+}
+
+// ===== MCP 客户端 =====
+function mcpHeaders(s){
+  const h={'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
+  if(s.token)h['Authorization']='Bearer '+s.token;
+  const extra=tryParse(s.headers);
+  if(extra)Object.assign(h,extra);
+  return h;
+}
+async function loadMcpTools(id){
+  const s=mcpServers.find(x=>x.id===id);if(!s)return;
+  try{
+    const r=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'ai-toolbox',version:'1.0.0'}}})});
+    const init=await r.json();
+    const proto=init.result&&init.result.protocolVersion;
+    // 通知服务器已初始化
+    try{await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})});}catch(e){}
+    const t=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list',params:{}})});
+    const tj=await t.json();
+    s.tools=(tj.result&&tj.result.tools)||[];
+    s.protocol=proto;
+    persist();renderToolsModal();updateStatus();toast('已拉取 '+s.tools.length+' 个 MCP 工具');
+  }catch(e){toast('MCP 拉取失败: '+e.message)}
+}
+async function callMcpTool(s,name,args){
+  try{
+    const r=await fetch(s.url,{method:'POST',headers:mcpHeaders(s),body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method:'tools/call',params:{name,arguments:args||{}}})});
+    const j=await r.json();
+    const content=j.result&&j.result.content||[];
+    return content.map(c=>c.text||JSON.stringify(c)).join('\n').slice(0,5000);
+  }catch(e){return 'MCP 调用失败: '+e.message}
+}
+
+// ===== API 请求 =====
+function buildUrl(p){
+  let base=(p.proxy||p.base||'').replace(/\/+$/,'');
+  return base+'/chat/completions';
+}
+async function chatOnce(messages,tools){
+  const p=activeProvider();
+  if(!p||!p.base){throw new Error('未配置提供商')}
+  if(!p.key){throw new Error('未设置 API Key')}
+  const model=$('modelSel').value||(p.models||[])[0];
+  const body={model,messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
+  if(tools&&tools.length)body.tools=tools;
+  const headers={'Content-Type':'application/json','Authorization':'Bearer '+p.key};
+  const r=await fetch(buildUrl(p),{method:'POST',headers,body:JSON.stringify(body)});
+  if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
+  return await r.json();
+}
+
+// ===== 对话主循环 =====
+let sending=false;
+async function sendMessage(){
+  if(sending)return;
+  const inp=$('input');const text=inp.value.trim();
+  if(!text){return}
+  let s=curSession();
+  if(!s){newSession();s=curSession();}
+  s.messages.push({role:'user',content:text});
+  inp.value='';autoGrow();
+  renderMsgs();
+  sending=true;$('sendBtn').disabled=true;
+  const p=activeProvider();
+  if(p&&p.sys)s.messages.unshift({role:'system',content:p.sys});
+  try{
+    const tools=collectTools();
+    const msgs=s.messages.filter(m=>m.role!=='system'||m===s.messages[0]);
+    let loop=0;
+    while(loop<6){
+      const data=await chatOnce(msgs,tools);
+      const choice=data.choices&&data.choices[0];
+      if(!choice){throw new Error('无响应')}
+      const msg=choice.message||{};
+      if(msg.content){s.messages.push({role:'assistant',content:msg.content})}
+      const tcs=msg.tool_calls||[];
+      if(tcs.length){
+        s.messages.push({role:'assistant',content:msg.content||'',toolCalls:tcs});
+        for(const tc of tcs){
+          let args={};try{args=JSON.parse(tc.function.arguments||'{}')}catch(e){}
+          const result=await runTool(tc.function.name,args);
+          s.messages.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
+          msgs.push({role:'assistant',content:msg.content||'',tool_calls:tcs});
+          msgs.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
+          renderMsgs();
+        }
+        loop++;continue;
+      }
+      break;
+    }
+  }catch(e){
+    s.messages.push({role:'assistant',content:'⚠️ 出错了：'+e.message});
+  }
+  sending=false;$('sendBtn').disabled=false;
+  renderMsgs();persist();
+}
+$('sendBtn').onclick=sendMessage;
+$('input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+});
+function autoGrow(){const i=$('input');i.style.height='auto';i.style.height=Math.min(i.scrollHeight,160)+'px';}
+$('input').addEventListener('input',autoGrow);
+$('menuBtn').onclick=()=>{$('sidebar').classList.add('open');$('sbBackdrop').classList.add('open');};
+$('sbBackdrop').onclick=()=>{$('sidebar').classList.remove('open');$('sbBackdrop').classList.remove('open');};
+$('btnSettings').onclick=()=>toast('设置面板：温度/最大Tokens 将在后续版本提供');
+
+// ===== 初始化 =====
+renderAll();
+if(!sessions.length)newSession();
+
+</script>
 </body>
 </html>
