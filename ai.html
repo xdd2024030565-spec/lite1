@@ -384,7 +384,9 @@ function renderMsgs(){
       const calls=m.toolCalls.map(tc=>'<div class="tool-call">🔧 '+esc(tc.function.name)+'('+esc(JSON.stringify(JSON.parse(tc.function.arguments||'{}')))+')</div>').join('');
       return '<div class="msg"><div class="role">'+esc(m.role)+'</div><div class="bubble">'+calls+'</div></div>';
     }
-    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble">'+md(m.content||'')+'</div></div>';
+    let reasoningHtml='';
+    if(m.reasoning){reasoningHtml='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>🤔 思考过程 ('+Math.round(m.reasoning.length/100)/10+'k 字)</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
+    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble">'+reasoningHtml+md(m.content||'')+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
@@ -658,7 +660,7 @@ async function chatStreamFull(messages,onDelta){
   if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
   const reader=r.body.getReader();
   const dec=new TextDecoder();
-  let buf='',full='';
+  let buf='',full='',reasoning='';
   const toolCalls=[];
   while(true){
     const {done,value}=await reader.read();
@@ -676,7 +678,8 @@ async function chatStreamFull(messages,onDelta){
         const ch=j.choices&&j.choices[0];
         if(!ch)continue;
         const delta=ch.delta||{};
-        if(delta.content){full+=delta.content;if(onDelta)onDelta(full)}
+        if(delta.content){full+=delta.content;if(onDelta)onDelta(full,reasoning)}
+        if(delta.reasoning_content){reasoning+=delta.reasoning_content;}
         if(delta.tool_calls){
           delta.tool_calls.forEach(tc=>{
             const idx=tc.index||0;
@@ -691,7 +694,7 @@ async function chatStreamFull(messages,onDelta){
       }catch(e){}
     }
   }
-  return {content:full,toolCalls:toolCalls.filter(Boolean)};
+  return {content:full,reasoning:reasoning,toolCalls:toolCalls.filter(Boolean)};
 }
 
 // ===== 对话主循环 =====
@@ -716,17 +719,17 @@ async function sendMessage(){
     let loop=0;
     while(loop<6&&!stopFlag){
       let lastContent='';
-      const partial=await chatStreamFull(msgs,full=>{
+      const partial=await chatStreamFull(msgs,(full,reasoningText)=>{
         lastContent=full;
         const existing=s.messages.find(m=>m.role==='assistant'&&m._streaming);
-        if(existing){existing.content=full;}
-        else{s.messages.push({role:'assistant',content:full,_streaming:true});}
+        if(existing){existing.content=full;if(reasoningText)existing.reasoning=reasoningText;}
+        else{s.messages.push({role:'assistant',content:full,reasoning:reasoningText||'',_streaming:true});}
         // 自动命名
         if(!s.title||s.title==='新对话'){const first=s.messages.find(m=>m.role==='user');if(first&&first.content)s.title=String(first.content).slice(0,16);}
         renderMsgs();
       });
       s.messages=s.messages.filter(m=>!(m._streaming));
-      if(partial.content){s.messages.push({role:'assistant',content:partial.content});}
+      if(partial.content){s.messages.push({role:'assistant',content:partial.content,reasoning:partial.reasoning||''});}
       const tcs=partial.toolCalls||[];
       if(tcs.length&&!stopFlag){
         s.messages.push({role:'assistant',content:partial.content||'',toolCalls:tcs});
