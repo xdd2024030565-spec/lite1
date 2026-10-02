@@ -126,7 +126,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     <div class="inputbar">
       <div class="inputwrap">
         <textarea id="input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
-        <button class="send-btn" id="sendBtn" title="发送">➤</button>
+        <button class="send-btn" id="sendBtn" title="发送">➤</button><button class="send-btn" id="stopBtn" title="停止生成" style="display:none;background:var(--danger)">■</button>
       </div>
     </div>
   </main>
@@ -624,8 +624,57 @@ async function chatOnce(messages,tools){
   return await r.json();
 }
 
+// ===== 流式请求 (SSE)，支持 content 与 tool_calls =====
+async function chatStreamFull(messages,onDelta){
+  const p=activeProvider();
+  if(!p||!p.base)throw new Error('未配置提供商');
+  if(!p.key)throw new Error('未设置 API Key');
+  const model=selectedModel||(p.models||[])[0];
+  const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
+  const headers={'Content-Type':'application/json','Authorization':'Bearer '+p.key};
+  const r=await fetch(buildUrl(p),{method:'POST',headers:headers,body:JSON.stringify(body)});
+  if(!r.ok){const t=await r.text();throw new Error('HTTP '+r.status+': '+t.slice(0,300))}
+  const reader=r.body.getReader();
+  const dec=new TextDecoder();
+  let buf='',full='';
+  const toolCalls=[];
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split(String.fromCharCode(10));
+    buf=lines.pop()||'';
+    for(const line of lines){
+      const t=line.trim();
+      if(!t.startsWith('data:'))continue;
+      const data=t.slice(5).trim();
+      if(data==='[DONE]')continue;
+      try{
+        const j=JSON.parse(data);
+        const ch=j.choices&&j.choices[0];
+        if(!ch)continue;
+        const delta=ch.delta||{};
+        if(delta.content){full+=delta.content;if(onDelta)onDelta(full)}
+        if(delta.tool_calls){
+          delta.tool_calls.forEach(tc=>{
+            const idx=tc.index||0;
+            if(!toolCalls[idx])toolCalls[idx]={id:tc.id||('call_'+idx),type:'function',function:{name:'',arguments:''}};
+            if(tc.id)toolCalls[idx].id=tc.id;
+            if(tc.function){
+              if(tc.function.name)toolCalls[idx].function.name+=tc.function.name;
+              if(tc.function.arguments)toolCalls[idx].function.arguments+=tc.function.arguments;
+            }
+          });
+        }
+      }catch(e){}
+    }
+  }
+  return {content:full,toolCalls:toolCalls.filter(Boolean)};
+}
+
 // ===== 对话主循环 =====
 let sending=false;
+let stopFlag=false;
 async function sendMessage(){
   if(sending)return;
   const inp=$('input');const text=inp.value.trim();
@@ -635,27 +684,36 @@ async function sendMessage(){
   s.messages.push({role:'user',content:text});
   inp.value='';autoGrow();
   renderMsgs();
-  sending=true;$('sendBtn').disabled=true;
+  sending=true;$('sendBtn').disabled=true;$('sendBtn').style.display='none';$('stopBtn').style.display='';
+  stopFlag=false;
   const p=activeProvider();
   if(p&&p.sys)s.messages.unshift({role:'system',content:p.sys});
   try{
     const tools=collectTools();
     const msgs=s.messages.filter(m=>m.role!=='system'||m===s.messages[0]);
     let loop=0;
-    while(loop<6){
-      const data=await chatOnce(msgs,tools);
-      const choice=data.choices&&data.choices[0];
-      if(!choice){throw new Error('无响应')}
-      const msg=choice.message||{};
-      if(msg.content){s.messages.push({role:'assistant',content:msg.content})}
-      const tcs=msg.tool_calls||[];
-      if(tcs.length){
-        s.messages.push({role:'assistant',content:msg.content||'',toolCalls:tcs});
+    while(loop<6&&!stopFlag){
+      let lastContent='';
+      const partial=await chatStreamFull(msgs,full=>{
+        lastContent=full;
+        const existing=s.messages.find(m=>m.role==='assistant'&&m._streaming);
+        if(existing){existing.content=full;}
+        else{s.messages.push({role:'assistant',content:full,_streaming:true});}
+        // 自动命名
+        if(!s.title||s.title==='新对话'){const first=s.messages.find(m=>m.role==='user');if(first&&first.content)s.title=String(first.content).slice(0,16);}
+        renderMsgs();
+      });
+      s.messages=s.messages.filter(m=>!(m._streaming));
+      if(partial.content){s.messages.push({role:'assistant',content:partial.content});}
+      const tcs=partial.toolCalls||[];
+      if(tcs.length&&!stopFlag){
+        s.messages.push({role:'assistant',content:partial.content||'',toolCalls:tcs});
         for(const tc of tcs){
+          if(stopFlag)break;
           let args={};try{args=JSON.parse(tc.function.arguments||'{}')}catch(e){}
           const result=await runTool(tc.function.name,args);
           s.messages.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
-          msgs.push({role:'assistant',content:msg.content||'',tool_calls:tcs});
+          msgs.push({role:'assistant',content:partial.content||'',tool_calls:tcs});
           msgs.push({role:'tool',tool_call_id:tc.id,name:tc.function.name,content:result});
           renderMsgs();
         }
@@ -666,9 +724,11 @@ async function sendMessage(){
   }catch(e){
     s.messages.push({role:'assistant',content:'⚠️ 出错了：'+e.message});
   }
-  sending=false;$('sendBtn').disabled=false;
+  sending=false;$('sendBtn').disabled=false;stopFlag=false;$('sendBtn').style.display='';$('stopBtn').style.display='none';
   renderMsgs();persist();
 }
+$('sendBtn').onclick=sendMessage;
+$('stopBtn').onclick=()=>{stopFlag=true;};
 $('sendBtn').onclick=sendMessage;
 $('input').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
