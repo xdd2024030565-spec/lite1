@@ -436,7 +436,14 @@ $('plSave').onclick=async()=>{
   const name=$('plName').value.trim(),type=$('plType').value,openapi=$('plOpenapi').value.trim();
   if(!name){toast('名称必填');return}
   const x={id:uid(),name,type,enabled:true};
-  if(type==='openapi'){x.openapi=openapi;}
+  if(type==='openapi'){
+    x.openapi=openapi;
+    try{
+      const parsed=parseOpenapiSpec(openapi);
+      if(parsed.error){toast(parsed.error);return}
+      x._parsedTools=parsed.tools;
+    }catch(e){toast('插件解析失败');return}
+  }
   else{x.tool={name:$('cName').value.trim(),desc:$('cDesc').value.trim(),url:$('cUrl').value.trim(),method:$('cMethod').value,headers:$('cHeaders').value.trim(),schema:$('cSchema').value.trim()};}
   plugins.push(x);persist();$('pluginModal').classList.remove('open');renderToolsModal();updateStatus();toast('已添加插件');
 };
@@ -456,9 +463,70 @@ function collectTools(){
     if(x.type==='custom'&&x.tool){
       tools.push({type:'function',function:{name:x.tool.name,description:x.tool.desc||'',parameters:tryParse(x.tool.schema)||{type:'object',properties:{}}}});
     }
+    if(x.type==='openapi'){
+      if(!x._parsedTools){const p=parseOpenapiSpec(x.openapi||'');if(!p.error)x._parsedTools=p.tools;else x._parsedTools=[];}
+      x._parsedTools.forEach(t=>{
+        tools.push({type:'function',function:{name:t.name,description:t.description||'',parameters:t.parameters||{type:'object',properties:{}}}});
+      });
+    }
   });
   return tools;
 }
+// ===== OpenAPI 插件解析与执行 =====
+function parseOpenapiSpec(input){
+  try{
+    const spec=JSON.parse(input.trim());
+    const tools=[];
+    if(spec.api&&Array.isArray(spec.api)){
+      const server=spec.server||spec.gateway||'';
+      const baseHeaders=spec.authorization||{};
+      spec.api.forEach(a=>{
+        if(!a||!a.name)return;
+        tools.push({name:a.name,description:a.description||'',method:(a.method||'GET').toUpperCase(),path:a.path||'',server:server,parameters:a.parameters||{type:'object',properties:{}},headers:baseHeaders});
+      });
+    } else if(spec.paths&&typeof spec.paths==='object'){
+      const server=(spec.servers&&spec.servers[0]&&spec.servers[0].url)||'';
+      Object.keys(spec.paths).forEach(p=>{
+        const ops=spec.paths[p]||{};
+        Object.keys(ops).forEach(m=>{
+          if(['get','post','put','delete','patch'].indexOf(m)<0)return;
+          const op=ops[m];
+          if(!op||!op.operationId)return;
+          const props={};const required=[];
+          (op.parameters||[]).forEach(pp=>{
+            props[pp.name]={type:(pp.schema&&pp.schema.type)||'string',description:pp.description||''};
+            if(pp.required)required.push(pp.name);
+          });
+          tools.push({name:op.operationId,description:op.summary||op.description||'',method:m.toUpperCase(),path:p,server:server,parameters:{type:'object',properties:props,required:required},headers:{}});
+        });
+      });
+    }
+    return {tools:tools};
+  }catch(e){return {error:'解析失败: '+e.message}}
+}
+async function execOpenapiTool(plugin,name,args){
+  try{
+    const toolsArr=plugin._parsedTools||[];
+    const t=toolsArr.find(x=>x.name===name);
+    if(!t)return '未找到工具 '+name;
+    let url=(t.server||'').replace(/\/+$/,'')+t.path;
+    const headers=Object.assign({'Content-Type':'application/json'},t.headers||{});
+    const body={};let query=[];
+    Object.keys(args||{}).forEach(k=>{
+      const v=encodeURIComponent(String(args[k]));
+      if(url.indexOf('{'+k+'}')>=0)url=url.split('{'+k+'}').join(v);
+      else if((t.method||'GET')==='GET')query.push(k+'='+v);
+      else body[k]=args[k];
+    });
+    if(query.length)url+='?'+query.join('&');
+    const opt={method:t.method||'GET',headers:headers};
+    if((t.method||'GET')!=='GET'&&Object.keys(body).length)opt.body=JSON.stringify(body);
+    const r=await fetch(url,opt);
+    const text=await r.text();
+    return String(text).slice(0,6000);
+  }catch(e){return '插件调用失败: '+e.message}
+}
+
 function tryParse(s){try{return JSON.parse(s)}catch(e){return null}}
 
 // 内置工具执行
@@ -494,6 +562,9 @@ async function runTool(name,args){
       return String(t).slice(0,4000);
     }catch(e){return '插件调用失败: '+e.message}
   }
+  // OpenAPI 插件工具
+  const opl=plugins.find(x=>x.enabled!==false&&x.type==='openapi'&&x._parsedTools&&x._parsedTools.some(t=>t.name===name));
+  if(opl){return await execOpenapiTool(opl,name,args)}
   // MCP 工具
   const mcpMatch=name.match(/^mcp_(.+?)_(.+)$/);
   if(mcpMatch){
