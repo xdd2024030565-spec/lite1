@@ -143,6 +143,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     <div class="form-row"><label>代理地址 (可选，解决 CORS)</label><input id="pProxy" placeholder="例如 https://ai.yongjiu.ccwu.cc 或留空直连">
       <div class="hint">商汤/OpenAI 官方若被浏览器 CORS 拦截，填你自己的中转地址即可。</div></div>
     <div class="form-row"><label>模型（逗号分隔）</label><input id="pModels" placeholder="SenseChat-5, SenseChat-Turbo"></div>
+    <div class="form-row" style="display:flex;gap:8px;margin-top:-4px"><button class="btn small" id="btnFetchModels" type="button">🔄 自动拉取模型</button><button class="btn small" id="btnTestConn" type="button">🔌 测试连接</button><span id="fetchModelsStatus" style="font-size:11px;color:var(--fg2);align-self:center"></span></div>
     <div class="form-row"><label>默认系统提示词</label><textarea id="pSys" rows="2" placeholder="你是一个有用的 AI 助手"></textarea></div>
     <div class="form-actions">
       <button class="btn danger" id="pDelete" style="display:none;margin-right:auto">删除</button>
@@ -271,6 +272,45 @@ $('btnAddProvider').onclick=()=>openProviderModal(null);
 $('providerList').onclick=e=>{const it=e.target.closest('.provider-item');if(it)openProviderModal(it.dataset.pid)};
 $('pCancel').onclick=()=>$('providerModal').classList.remove('open');
 $('pDelete').onclick=()=>{const pid=$('providerModal').dataset.pid;providers=providers.filter(p=>p.id!==pid);if(activeProviderId===pid)activeProviderId=providers[0]?providers[0].id:null;persist();$('providerModal').classList.remove('open');renderAll();toast('已删除')};
+// ===== 自动拉取模型 / 测试连接 =====
+$('btnFetchModels').onclick=async()=>{
+  const base=$('pBase').value.trim().replace(/\/+$/,'');
+  const key=$('pKey').value.trim();
+  const proxy=$('pProxy').value.trim();
+  const st=$('fetchModelsStatus');st.style.color='';
+  if(!base){st.textContent='请先填 API 地址';return}
+  st.textContent='拉取中…';
+  try{
+    const url=(proxy||base)+'/models';
+    const h={'Content-Type':'application/json'};
+    if(key)h['Authorization']='Bearer '+key;
+    const r=await fetch(url,{headers:h});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const models=(j.data||[]).map(x=>x.id).filter(Boolean);
+    if(!models.length)throw new Error('未解析到模型');
+    $('pModels').value=models.join(', ');
+    st.textContent='✓ 拉取 '+models.length+' 个模型';
+  }catch(e){st.textContent='✗ 失败: '+e.message;st.style.color='var(--danger)'}
+};
+$('btnTestConn').onclick=async()=>{
+  const base=$('pBase').value.trim().replace(/\/+$/,'');
+  const key=$('pKey').value.trim();
+  const proxy=$('pProxy').value.trim();
+  const st=$('fetchModelsStatus');st.style.color='';
+  if(!base){st.textContent='请先填 API 地址';return}
+  st.textContent='测试中…';
+  try{
+    const url=(proxy||base)+'/models';
+    const h={'Content-Type':'application/json'};
+    if(key)h['Authorization']='Bearer '+key;
+    const r=await fetch(url,{headers:h});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const n=(j.data||[]).length;
+    st.textContent='✓ 连接成功'+(n?'，'+n+' 个模型':'');
+  }catch(e){st.textContent='✗ 失败: '+e.message;st.style.color='var(--danger)'}
+};
 $('pSave').onclick=()=>{
   const name=$('pName').value.trim(),base=$('pBase').value.trim(),key=$('pKey').value.trim(),proxy=$('pProxy').value.trim(),models=$('pModels').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),sys=$('pSys').value.trim();
   if(!name||!base){toast('名称和 API 地址必填');return}
