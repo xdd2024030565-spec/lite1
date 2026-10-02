@@ -267,6 +267,24 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 /* 工具执行中旋转圈 */
 .tc-spin{display:inline-block;width:10px;height:10px;border:1.5px solid var(--line-strong);border-top-color:var(--acc);border-radius:50%;animation:tcspin .8s linear infinite;vertical-align:-1px;margin-right:4px}
 @keyframes tcspin{to{transform:rotate(360deg)}}
+/* ===== 左侧模块导航 ===== */
+.sb-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--bg-elev);flex-shrink:0}
+.sb-head span{font-size:12px;font-weight:600;font-family:var(--mono);color:var(--fg);letter-spacing:.04em}
+.sb-sec{font-size:10px;font-weight:600;color:var(--fg-faint);letter-spacing:.08em;text-transform:uppercase;padding:10px 10px 4px;font-family:var(--mono)}
+.sb-mod{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:1px 6px;border-radius:var(--r);cursor:pointer;font-size:12px;color:var(--fg);transition:background .1s}
+.sb-mod:hover{background:var(--line-strong)}
+.sb-mod .sb-ico{width:16px;text-align:center;font-size:13px;flex-shrink:0}
+.sb-mod .sb-t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-mod .sb-ar{color:var(--fg-faint);font-size:12px}
+.sb-mod.soon{opacity:.55;cursor:not-allowed}
+.sb-mod .sb-soon{font-size:9px;color:var(--fg-faint);border:1px solid var(--line);padding:0 4px;border-radius:2px;font-family:var(--mono)}
+.sb-view{display:block}
+.sb-view .panel{border-bottom:0;padding:10px}
+.sb-tool-item{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line-strong);font-size:12px}
+.sb-tool-item:last-child{border-bottom:0}
+.sb-tool-item .n{flex:1;font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-tool-item .d{font-size:10px;color:var(--fg-faint);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-empty{font-size:12px;color:var(--fg-faint);padding:8px 4px;font-family:var(--mono)}
 </style>
 <body>
 <div class="topbar">
@@ -283,23 +301,70 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 <div class="layout">
   <div class="sidebar-backdrop" id="sbBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-scroll">
+  <div class="sb-head">
+    <button class="btn small" id="sbBack" style="display:none">← 返回</button>
+    <span id="sbTitle">主菜单</span>
+  </div>
+  <div class="sidebar-scroll">
+    <!-- 主菜单 -->
+    <div class="sb-view" id="sbHome">
+      <div class="sb-sec">模块</div>
+      <div class="sb-mod" data-view="chats"><span class="sb-ico">💬</span><span class="sb-t">对话</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="models"><span class="sb-ico">🤖</span><span class="sb-t">模型</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="plugins"><span class="sb-ico">🧩</span><span class="sb-t">插件</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="mcp"><span class="sb-ico">🔌</span><span class="sb-t">MCP</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="builtin"><span class="sb-ico">🛠</span><span class="sb-t">内置工具</span><span class="sb-ar">›</span></div>
+      <div class="sb-mod" data-view="settings"><span class="sb-ico">⚙</span><span class="sb-t">设置</span><span class="sb-ar">›</span></div>
+      <div class="sb-sec" style="margin-top:14px">预留</div>
+      <div class="sb-mod soon" data-view="kb"><span class="sb-ico">📚</span><span class="sb-t">知识库</span><span class="sb-soon">即将上线</span></div>
+      <div class="sb-mod soon" data-view="wf"><span class="sb-ico">🔀</span><span class="sb-t">工作流</span><span class="sb-soon">即将上线</span></div>
+      <div class="sb-mod soon" data-view="logs"><span class="sb-ico">📜</span><span class="sb-t">日志</span><span class="sb-soon">即将上线</span></div>
+    </div>
+    <!-- 对话 -->
+    <div class="sb-view" id="sbChats" style="display:none">
       <section class="panel">
         <h3>CHATS<span class="sp"></span><button class="btn small" id="btnNew2">＋</button></h3>
         <div class="session-list" id="sessionList"></div>
       </section>
+    </div>
+    <!-- 模型 -->
+    <div class="sb-view" id="sbModels" style="display:none">
       <section class="panel">
         <h3>MODELS<span class="sp"></span><button class="btn small" id="btnAddProvider">添加</button></h3>
         <div id="providerList"></div>
         <select class="model-sel" id="modelSel"></select>
       </section>
+    </div>
+    <!-- 插件 -->
+    <div class="sb-view" id="sbPlugins" style="display:none">
       <section class="panel">
-        <h3>CAPABILITIES</h3>
-        <button class="btn small" style="width:100%" id="btnManageTools">管理工具、MCP 与插件</button>
-        <div id="toolStatus" style="margin-top:8px"></div>
+        <h3>PLUGINS<span class="sp"></span><button class="btn small" id="btnAddPlugin2">添加</button></h3>
+        <div id="sbPluginList"></div>
       </section>
     </div>
-  </aside>
+    <!-- MCP -->
+    <div class="sb-view" id="sbMcp" style="display:none">
+      <section class="panel">
+        <h3>MCP SERVERS<span class="sp"></span><button class="btn small" id="btnAddMcp2">添加</button></h3>
+        <div id="sbMcpList"></div>
+      </section>
+    </div>
+    <!-- 内置工具 -->
+    <div class="sb-view" id="sbBuiltin" style="display:none">
+      <section class="panel">
+        <h3>BUILTIN TOOLS</h3>
+        <div id="sbBuiltinList"></div>
+      </section>
+    </div>
+    <!-- 设置 -->
+    <div class="sb-view" id="sbSettings" style="display:none">
+      <section class="panel">
+        <h3>SETTINGS</h3>
+        <div id="sbSettingsList"></div>
+      </section>
+    </div>
+  </div>
+</aside>
   <main class="main">
     <div class="msgs" id="msgs"></div>
     <div class="inputbar">
@@ -747,7 +812,86 @@ function patchStreamBubble(){
   const box=document.getElementById('msgs');
   if(box)box.scrollTop=box.scrollHeight;
 }
-function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();updateCtxBar();}
+// ===== 左侧模块导航 =====
+let _sbCur='home';
+const SB_VIEWS={home:'sbHome',chats:'sbChats',models:'sbModels',plugins:'sbPlugins',mcp:'sbMcp',builtin:'sbBuiltin',settings:'sbSettings'};
+const SB_TITLES={home:'主菜单',chats:'对话',models:'模型',plugins:'插件',mcp:'MCP',builtin:'内置工具',settings:'设置'};
+function showSbView(v){
+  _sbCur=v;
+  Object.keys(SB_VIEWS).forEach(function(k){
+    const el=document.getElementById(SB_VIEWS[k]);
+    if(el)el.style.display=(k===v)?'':'none';
+  });
+  const back=document.getElementById('sbBack');
+  const title=document.getElementById('sbTitle');
+  if(back)back.style.display=(v==='home')?'none':'';
+  if(title)title.textContent=SB_TITLES[v]||'主菜单';
+  renderSbView(v);
+}
+function renderSbView(v){
+  if(v==='plugins')renderSbPlugins();
+  else if(v==='mcp')renderSbMcp();
+  else if(v==='builtin')renderSbBuiltin();
+  else if(v==='settings')renderSbSettings();
+  else if(v==='chats')renderSessions();
+  else if(v==='models')renderProviders();
+}
+function renderSbPlugins(){
+  const el=document.getElementById('sbPluginList');
+  if(!el)return;
+  el.innerHTML=plugins.map(function(x){
+    return '<div class="sb-tool-item"><span class="n">📦 '+esc(x.name)+'</span><span class="d">'+esc(x.type||'')+'</span><label class="switch"><input type="checkbox" data-plid="'+x.id+'"'+(x.enabled!==false?' checked':'')+'><span class="slider"></span></label></div>';
+  }).join('')||'<div class="sb-empty">未添加插件</div>';
+  el.querySelectorAll('input').forEach(function(i){i.onchange=function(){const x=plugins.find(function(v){return v.id===i.dataset.plid;});if(x)x.enabled=i.checked;persist();renderSbPlugins();updateStatus();};});
+}
+function renderSbMcp(){
+  const el=document.getElementById('sbMcpList');
+  if(!el)return;
+  el.innerHTML=mcpServers.map(function(sv){
+    const cnt=(sv.tools||[]).length;
+    const err=sv.lastError?'<div class="hint" style="color:var(--danger);width:100%">'+esc(sv.lastError)+'</div>':'';
+    return '<div class="sb-tool-item"><div style="flex:1;min-width:0"><div class="n">🔌 '+esc(sv.name)+' <span class="hint" style="margin:0">'+(cnt?cnt+' 个工具':'未拉取')+'</span></div><div class="hint" style="margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(sv.url||'')+'</div>'+err+'</div><button class="btn small" data-mref="'+sv.id+'">重拉</button><label class="switch"><input type="checkbox" data-mid="'+sv.id+'"'+(sv.enabled!==false?' checked':'')+'><span class="slider"></span></label></div>';
+  }).join('')||'<div class="sb-empty">暂无 MCP 服务器</div>';
+  el.querySelectorAll('[data-mref]').forEach(function(b){b.onclick=function(){loadMcpTools(b.dataset.mref);};});
+  el.querySelectorAll('input').forEach(function(i){i.onchange=function(){const sv=mcpServers.find(function(x){return x.id===i.dataset.mid;});if(sv)sv.enabled=i.checked;persist();renderSbMcp();updateStatus();};});
+}
+function renderSbBuiltin(){
+  const el=document.getElementById('sbBuiltinList');
+  if(!el)return;
+  el.innerHTML=builtinTools.map(function(t){
+    return '<div class="sb-tool-item"><span class="n">🛠 '+esc(t.name)+'</span><span class="d">'+esc(t.desc||'')+'</span><label class="switch"><input type="checkbox" data-btid="'+t.id+'"'+(t.enabled?' checked':'')+'><span class="slider"></span></label></div>';
+  }).join('')||'<div class="sb-empty">暂无工具</div>';
+  el.querySelectorAll('input').forEach(function(i){i.onchange=function(){const t=builtinTools.find(function(x){return x.id===i.dataset.btid;});if(t)t.enabled=i.checked;persist();renderSbBuiltin();updateStatus();};});
+}
+function renderSbSettings(){
+  const el=document.getElementById('sbSettingsList');
+  if(!el)return;
+  el.innerHTML='<div class="sb-tool-item" style="cursor:pointer" id="sbOpenSettings"><span class="n">⚙ 打开设置面板</span><span class="sb-ar">›</span></div>';
+  const open=document.getElementById('sbOpenSettings');
+  if(open)open.onclick=function(){document.getElementById('btnSettings').click();};
+}
+// 导航点击绑定
+function initSbNav(){
+  document.querySelectorAll('.sb-mod[data-view]').forEach(function(mod){
+    mod.onclick=function(){
+      const v=mod.dataset.view;
+      if(mod.classList.contains('soon')){toast('该模块即将上线');return;}
+      showSbView(v);
+      const sd=document.getElementById('sidebar');
+      const bk=document.getElementById('sbBackdrop');
+      if(sd&&window.innerWidth<=860){sd.classList.remove('open');}
+      if(bk)bk.classList.remove('open');
+    };
+  });
+  const back=document.getElementById('sbBack');
+  if(back)back.onclick=function(){showSbView('home');};
+  const ap2=document.getElementById('btnAddPlugin2');
+  if(ap2)ap2.onclick=function(){document.getElementById('btnAddPlugin').click();};
+  const am2=document.getElementById('btnAddMcp2');
+  if(am2)am2.onclick=function(){document.getElementById('btnAddMcp').click();};
+}
+initSbNav();
+function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();updateCtxBar();if(_sbCur&&_sbCur!=='home')renderSbView(_sbCur);}
 
 // ===== 工具/MCP/插件管理 UI =====
 function updateStatus(){
@@ -760,7 +904,7 @@ function updateStatus(){
   const bt=builtinTools.filter(t=>t.enabled).length;
   const mc=mcpServers.filter(s=>s.enabled!==false).length;
   const pl=plugins.filter(x=>x.enabled!==false).length;
-  ts.innerHTML='<div style="font-size:11px;color:var(--fg2)">内置 '+bt+' · MCP '+mc+' · 插件 '+pl+'</div>';
+  if(ts)ts.innerHTML='<div style="font-size:11px;color:var(--fg2)">内置 '+bt+' · MCP '+mc+' · 插件 '+pl+'</div>';
 }
 function renderToolsModal(){
   // 内置工具
@@ -788,7 +932,7 @@ function renderToolsModal(){
   pe.querySelectorAll('input').forEach(i=>i.onchange=()=>{const x=plugins.find(v=>v.id===i.dataset.plid);if(x)x.enabled=i.checked;persist();updateStatus();});
   pe.querySelectorAll('[data-pldel]').forEach(b=>b.onclick=()=>{plugins=plugins.filter(x=>x.id!==b.dataset.pldel);persist();renderToolsModal();updateStatus();});
 }
-$('btnManageTools').onclick=()=>{renderToolsModal();$('toolsModal').classList.add('open');};
+
 $('toolsClose').onclick=()=>$('toolsModal').classList.remove('open');
 $('btnAddMcp').onclick=()=>{$('mcpModal').classList.add('open');$('mName').value='';$('mUrl').value='';$('mToken').value='';$('mHeaders').value='';};
 $('mCancel').onclick=()=>$('mcpModal').classList.remove('open');
