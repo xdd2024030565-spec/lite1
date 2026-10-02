@@ -142,7 +142,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
 <div class="modal-mask" id="providerModal">
   <div class="modal">
     <h2 id="providerModalTitle">添加提供商</h2>
-    <p class="sub">填写 OpenAI 兼容接口。商汤、OpenAI 等会自动经代理访问。</p>
+    <p class="sub">填写 OpenAI 兼容接口。商汤、OpenAI 等会自动经代理��问。</p>
     <div class="tabs"><button type="button" class="on" data-tab="p-basic">连接</button><button type="button" data-tab="p-model">模型</button><button type="button" data-tab="p-adv">高级</button></div>
     <div class="tab-pane on" id="p-basic">
       <div class="form-row"><label>常用模板</label><select id="pTemplate"><option value="">自定义</option><option value="sensenova">商汤 SenseNova</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google Gemini</option><option value="qwen">通义千问</option><option value="moonshot">Kimi</option><option value="zhipu">智谱</option><option value="doubao">豆包</option><option value="ollama">Ollama（本地）</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option></select></div>
@@ -151,7 +151,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
       <div class="form-row"><label>API Key</label><input id="pKey" type="password" placeholder="sk-..."></div>
     </div>
     <div class="tab-pane" id="p-model">
-      <div class="form-row"><label>模型（逗号分隔）</label><input id="pModels" placeholder="sensenova-6.8-flash-lite, deepseek-v4-flash"></div>
+      <div class="form-row"><label>模型（逗号分���）</label><input id="pModels" placeholder="sensenova-6.8-flash-lite, deepseek-v4-flash"></div>
       <div class="form-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn small" id="btnFetchModels" type="button">拉取模型</button><button class="btn small" id="btnTestConn" type="button">测试连接</button><span id="fetchModelsStatus" class="hint" style="margin:0"></span></div>
       <div class="form-row"><label>默认系统提示词</label><textarea id="pSys" rows="3" placeholder="你是一个有用的 AI 助手"></textarea></div>
     </div>
@@ -781,6 +781,172 @@ async function callMcpTool(s,name,args){
     return out.slice(0,5000)||"（工具返回为空）";
   }catch(e){return "MCP 调用失败: "+((e&&e.message)||e);}
 }
+// ===== API 请求 =====
+// 计算实际请求地址：支持「专有代理 / 内置代理 / 直连」三种模式
+function buildUrl(p, endpoint){
+  const ep = endpoint || "/chat/completions";
+  let base=(p.base||"").replace(/\/+$/,"");
+  if(p.proxy){
+    return p.proxy.replace(/\/+$/,"") + ep;
+  }
+  if(settings.useProxy || needProxyFor(base)){
+    const pb=(settings.proxyBase||BUILTIN_PROXY).replace(/\/+$/,"");
+    const tgt=encodeURIComponent(base);
+    return pb + "/v1" + ep + (ep.indexOf("?")>=0?"&":"?") + "target=" + tgt;
+  }
+  return base + ep;
+}
+// 代理模式下请求需要携带 X-Target-Base 头
+function buildHeaders(p){
+  const h={"Content-Type":"application/json"};
+  if(p.key)h["Authorization"]="Bearer "+p.key;
+  const base=(p.base||"").replace(/\/+$/,"");
+  if(!p.proxy && (settings.useProxy||needProxyFor(base))){
+    h["X-Target-Base"]=base;
+  }
+  return h;
+}
+
+// ===== 非流式请求（供工具循环备用） =====
+async function chatOnce(messages,tools){
+  const p=activeProvider();
+  if(!p||!p.base)throw new Error("未配置提供商");
+  if(!p.key)throw new Error("未设置 API Key");
+  const model=selectedModel||(p.models||[])[0];
+  const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
+  if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
+  const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body)});
+  if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
+  return await r.json();
+}
+
+// ===== 流式请求（SSE），解析 content / reasoning / tool_calls =====
+async function chatStreamFull(messages,onDelta,tools){
+  const p=activeProvider();
+  if(!p||!p.base)throw new Error("未配置提供商");
+  if(!p.key)throw new Error("未设置 API Key");
+  const model=selectedModel||(p.models||[])[0];
+  const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
+  if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
+  const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body)});
+  if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
+  const reader=r.body.getReader();
+  const dec=new TextDecoder();
+  let buf="",full="",reasoning="";
+  const toolCalls=[];
+  const handleLine=line=>{
+    const t=line.trim();
+    if(t.indexOf("data:")!==0)return;
+    const data=t.slice(5).trim();
+    if(!data||data==="[DONE]")return;
+    let j;try{j=JSON.parse(data);}catch(e){return;}
+    const ch=j.choices&&j.choices[0];
+    if(!ch)return;
+    const delta=ch.delta||{};
+    if(delta.reasoning_content){reasoning+=delta.reasoning_content;}
+    if(delta.content){full+=delta.content;if(onDelta)onDelta(full,reasoning);}
+    if(delta.tool_calls){
+      delta.tool_calls.forEach(tc=>{
+        const idx=tc.index||0;
+        if(!toolCalls[idx])toolCalls[idx]={id:tc.id||("call_"+idx),type:"function",function:{name:"",arguments:""}};
+        if(tc.id)toolCalls[idx].id=tc.id;
+        if(tc.function){
+          if(tc.function.name)toolCalls[idx].function.name+=tc.function.name;
+          if(tc.function.arguments)toolCalls[idx].function.arguments+=tc.function.arguments;
+        }
+      });
+    }
+  };
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split(String.fromCharCode(10));
+    buf=lines.pop()||"";
+    for(const ln of lines)handleLine(ln);
+  }
+  if(buf)handleLine(buf);
+  return {content:full,reasoning:reasoning,toolCalls:toolCalls.filter(Boolean)};
+}
+// ===== 对话主循环 =====
+let sending=false;
+let stopFlag=false;
+let lastError="";
+async function runCompletion(){
+  let s=curSession();
+  if(!s){newSession();s=curSession();}
+  sending=true;
+  $("sendBtn").disabled=true;$("sendBtn").style.display="none";$("stopBtn").style.display="";
+  stopFlag=false;
+  const p=activeProvider();
+  try{
+    const tools=collectTools();
+    // 注入工具清单，让模型知道自己能调用工具
+    const sp=buildSystemPrompt(p&&p.sys,tools);
+    s.messages=s.messages.filter(m=>m.role!=="system");
+    if(sp)s.messages.unshift({role:"system",content:sp});
+    const msgs=s.messages.filter(m=>m.role!=="system"||m===s.messages[0]);
+    let loop=0;
+    while(loop<6&&!stopFlag){
+      const partial=await chatStreamFull(msgs,(full,reasoningText)=>{
+        let existing=s.messages.find(m=>m.role==="assistant"&&m._streaming);
+        if(!existing){
+          s.messages.push({role:"assistant",content:full,reasoning:reasoningText||"",_streaming:true});
+          if(!s.title||s.title==="新对话"){const first=s.messages.find(m=>m.role==="user");if(first&&first.content)s.title=String(first.content).slice(0,16);}
+          renderMsgs();
+          const box=$("msgs");if(box)box.scrollTop=box.scrollHeight;
+          _streamDirty=true;renderStreamThrottled();
+          return;
+        }
+        existing.content=full;
+        if(reasoningText)existing.reasoning=reasoningText;
+        _streamDirty=true;
+        renderStreamThrottled();
+      },tools);
+      s.messages=s.messages.filter(m=>!(m._streaming));
+      if(partial.content||partial.reasoning){s.messages.push({role:"assistant",content:partial.content||"",reasoning:partial.reasoning||""});}
+      const tcs=partial.toolCalls||[];
+      if(tcs.length&&!stopFlag){
+        s.messages.push({role:"assistant",content:partial.content||"",toolCalls:tcs});
+        for(const tc of tcs){
+          if(stopFlag)break;
+          let args={};try{args=JSON.parse(tc.function.arguments||"{}");}catch(e){}
+          const result=await runTool(tc.function.name,args);
+          s.messages.push({role:"tool",tool_call_id:tc.id,name:tc.function.name,content:result});
+          msgs.push({role:"assistant",content:partial.content||"",tool_calls:tcs});
+          msgs.push({role:"tool",tool_call_id:tc.id,name:tc.function.name,content:result});
+          renderMsgs();
+        }
+        loop++;continue;
+      }
+      break;
+    }
+  }catch(e){
+    const pm=s.messages.find(m=>m.role==="assistant"&&m._streaming);
+    const kept=pm?(pm.content||""):"";
+    const keptR=pm?(pm.reasoning||""):"";
+    s.messages=s.messages.filter(m=>!(m._streaming));
+    if(kept)s.messages.push({role:"assistant",content:kept,reasoning:keptR});
+    const raw=String((e&&e.message)||e||"未知错误");
+    const kind=/HTTP 401|HTTP 403|未设置 API Key|未配置/.test(raw)?"配置错误":(/(500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|timeout|超时)/i.test(raw)?"网络或服务异常":"其他错误");
+    s.messages.push({role:"assistant",content:"⚠️ "+kind+"："+raw,_error:true});
+    lastError=raw;
+  }
+  sending=false;
+  $("sendBtn").disabled=false;$("sendBtn").style.display="";$("stopBtn").style.display="none";
+  renderMsgs();persist();
+}
+async function sendMessage(){
+  if(sending)return;
+  const inp=$("input");const text=inp.value.trim();
+  if(!text)return;
+  let s=curSession();
+  if(!s){newSession();s=curSession();}
+  s.messages.push({role:"user",content:text});
+  inp.value="";autoGrow();
+  renderMsgs();
+  await runCompletion();
+}
 // 重试：删掉错误卡片，用相同历史再请求一次
 async function retryLast(){
   const st=curSession();
@@ -800,7 +966,6 @@ async function continueLast(){
 }
 $('sendBtn').onclick=sendMessage;
 $('stopBtn').onclick=()=>{stopFlag=true;};
-$('sendBtn').onclick=sendMessage;
 $('input').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
 });
