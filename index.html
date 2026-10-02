@@ -420,6 +420,31 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
         </div>
       </div>
     </div>
+
+    <div class="settings-group">
+      <div class="setting-item">
+        <div><div class="setting-label">🌐 网络加速网关</div><div class="setting-desc">自动切换最快可用节点；失效时可手动填入备用订阅地址（快捷保留区）</div></div>
+        <div id="gwStatus" style="font-size:13px;color:var(--fg2);margin:8px 0;line-height:1.6"></div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="width:70px;font-size:13px">数据API</label>
+            <input type="text" class="setting-input" id="gwCustomApi" placeholder="备用：https://api2.yongjiu.ccwu.cc">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="width:70px;font-size:13px">认证API</label>
+            <input type="text" class="setting-input" id="gwCustomAuth" placeholder="备用：https://auth-api2.yongjiu.ccwu.cc">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="width:70px;font-size:13px">搜索API</label>
+            <input type="text" class="setting-input" id="gwCustomSearch" placeholder="备用：https://search2.yongjiu.ccwu.cc">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="action-btn" id="gwSaveBtn" style="flex:1">保存备用节点</button>
+            <button class="action-btn" id="gwTestBtn" style="flex:1">重新测速</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <button class="action-btn" id="exportBtn">导出为 JSON 文件</button>
     <input type="file" id="importFile" accept=".json" style="display:none;">
     <button class="action-btn" id="importBtn">从 JSON 文件导入</button>
@@ -487,6 +512,91 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 </div>
 
 <script>
+// ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
+// 原理：并发探测多个网关域名，选最快可用者，覆盖 API_BASE/AUTH_API/SEARCH_API
+// 支持：localStorage 缓存结果（TTL 10分钟）、手动填入自定义订阅地址（快捷保留区）
+
+(function(){
+  // 服务 -> 候选网关域名（按优先级，第一位为默认）
+  var GATEWAY_POOL = {
+    api:  ["https://api.yongjiu.ccwu.cc", "https://api2.yongjiu.ccwu.cc"],
+    auth: ["https://auth-api.yongjiu.ccwu.cc", "https://auth-api2.yongjiu.ccwu.cc"],
+    search: ["https://search.yongjiu.ccwu.cc", "https://search2.yongjiu.ccwu.cc"]
+  };
+
+  // 快捷保留区：用户可手动填写的备用订阅地址（失效时自动切换到这里）
+  function getCustom(service){
+    try{ return localStorage.getItem('gw_custom_'+service)||''; }catch(e){ return ''; }
+  }
+  function setCustom(service, url){
+    try{ localStorage.setItem('gw_custom_'+service, url||''); }catch(e){}
+  }
+
+  // 健康检查：GET /health 或根路径，3 秒超时
+  function test(url){
+    return new Promise(function(resolve){
+      var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
+      var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); resolve(false); }, 3000);
+      var opts = {method:'GET', cache:'no-store'};
+      if(ctrl) opts.signal = ctrl.signal;
+      fetch(url+'/health', opts)
+        .then(function(r){ clearTimeout(timer); resolve(r.ok || r.status===404); })
+        .catch(function(){ clearTimeout(timer); resolve(false); });
+    });
+  }
+
+  // 选优：返回该服务当前最佳网关 URL（同步返回，探测异步缓存）
+  var bestCache = {};
+  var probing = {};
+  function pickBest(service){
+    var pool = GATEWAY_POOL[service] || [];
+    var custom = getCustom(service);
+    if(custom) pool = [custom].concat(pool);
+
+    var cached = bestCache[service];
+    if(cached && Date.now()-cached.ts < 10*60*1000) return cached.url;
+
+    var fallback = pool[0] || '';
+    if(!probing[service]){
+      probing[service] = true;
+      var results = [];
+      pool.forEach(function(url, i){
+        test(url).then(function(ok){
+          results.push({url:url, ok:ok, idx:i});
+          if(results.length===pool.length){
+            var best = results.filter(function(r){return r.ok;}).sort(function(a,b){return a.idx-b.idx;})[0];
+            if(best){ bestCache[service] = {url:best.url, ts:Date.now()}; }
+            probing[service] = false;
+          }
+        });
+      });
+    }
+    return fallback;
+  }
+
+  // 强制重测（设置面板手动触发）
+  function refresh(){
+    bestCache = {};
+    ['api','auth','search'].forEach(function(s){ probing[s]=false; pickBest(s); });
+    return Promise.all([
+      test(GATEWAY_POOL.api[0]), test(GATEWAY_POOL.api[1]),
+      test(GATEWAY_POOL.auth[0]), test(GATEWAY_POOL.auth[1]),
+      test(GATEWAY_POOL.search[0]), test(GATEWAY_POOL.search[1])
+    ]);
+  }
+
+  window.APIGateway = {
+    pick: pickBest,
+    getCustom: getCustom,
+    setCustom: setCustom,
+    pool: GATEWAY_POOL,
+    refresh: refresh,
+    _cache: bestCache,
+    _test: test
+  };
+})();
+
+
 (function(){
   "use strict";
 
@@ -532,6 +642,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   var API_BASE="https://api.yongjiu.ccwu.cc";
   var AUTH_API="https://auth-api.yongjiu.ccwu.cc";
   var SEARCH_API="https://search.yongjiu.ccwu.cc";
+  // 网关选优：以上为默认域名，实际请求走 APIGateway.pick() 自动选优（主备切换+快捷保留区）
   var ADMIN_PANELS=["panel-categories","panel-settings","panel-password","panel-vault","panel-memo"];
   var S={siteName:"网址储存",settings:{theme:"auto",fontSize:16},categories:[{id:"default",name:"常用"}],links:[],curCat:"all",searchQ:"",fileSha:null,busy:false,undoCb:null,saveRetrying:false,activePanel:"panel-links",authMode:"loading",authToken:null};
   var engineHistory=[],engineHistIdx=-1;
@@ -937,7 +1048,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 
   // ====== 认证系统 ======
   function checkAuthStatus(){
-    fetch(AUTH_API+"/auth/status")
+    fetch(APIGateway.pick("auth")+"/auth/status")
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.setupNeeded){showAuthPage("setup");}
@@ -951,7 +1062,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       .catch(function(){showAuthPage("login");});
   }
   function verifyToken(token){
-    fetch(AUTH_API+"/auth/verify",{method:"POST",headers:{"Authorization":"Bearer "+token}})
+    fetch(APIGateway.pick("auth")+"/auth/verify",{method:"POST",headers:{"Authorization":"Bearer "+token}})
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.valid){S.authToken=token;S.authMode="admin";enterMainInterface();}
@@ -986,7 +1097,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   function handleAdminLogin(){
     var pwd=$("loginPassword").value; if(!pwd) return;
     var btn=$("loginSubmitBtn"); btn.textContent="登录中..."; btn.disabled=true; $("loginError").textContent="";
-    fetch(AUTH_API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pwd})})
+    fetch(APIGateway.pick("auth")+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pwd})})
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.token){safeSS('setItem','authToken',d.token);safeLS('removeItem','guestMode');S.authToken=d.token;S.authMode="admin";enterMainInterface();}
@@ -1000,7 +1111,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(!pwd||pwd.length<8){$("setupError").textContent="密码至少8位";return;}
     if(pwd!==conf){$("setupError").textContent="两次密码不一致";return;}
     var btn=$("setupSubmitBtn"); btn.textContent="设置中..."; btn.disabled=true; $("setupError").textContent="";
-    fetch(AUTH_API+"/auth/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pwd})})
+    fetch(APIGateway.pick("auth")+"/auth/setup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pwd})})
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.token){safeSS('setItem','authToken',d.token);S.authToken=d.token;S.authMode="admin";enterMainInterface();}
@@ -1022,7 +1133,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(np.length<8){msg.textContent="新密码至少8位";msg.style.display="block";return;}
     if(np!==cp){msg.textContent="两次新密码不一致";msg.style.display="block";return;}
     var btn=$("changePwdBtn"); btn.textContent="修改中..."; btn.disabled=true; msg.style.display="none";
-    fetch(AUTH_API+"/auth/change-password",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.authToken},body:JSON.stringify({currentPassword:cur,newPassword:np})})
+    fetch(APIGateway.pick("auth")+"/auth/change-password",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+S.authToken},body:JSON.stringify({currentPassword:cur,newPassword:np})})
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.token){safeSS('setItem','authToken',d.token);S.authToken=d.token;msg.textContent="✅ 密码修改成功";msg.style.display="block";$("curPwdInput").value="";$("newPwdInput").value="";$("confirmPwdInput").value="";}
@@ -1037,7 +1148,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var opts={method:m,headers:{Accept:"application/vnd.github.v3+json"}};
     if(b) opts.body=JSON.stringify(b);
     // 认证API的token不应作为GitHub token，移除Authorization头，由代理Worker处理
-    return fetch(API_BASE+p,opts).then(function(res){
+    return fetch(APIGateway.pick("api")+p,opts).then(function(res){
       if(res.status===401){handleLogout();throw new Error("登录已过期");}
       if(!res.ok) return res.json().catch(function(){return{}}).then(function(e){throw new Error(e.message||res.status);});
       if(res.status===204) return null;
@@ -1339,7 +1450,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var q=$("engineInput").value.trim(); if(!q) return;
     var btn=$("engineBtn"); btn.textContent="搜索中..."; btn.disabled=true;
     $("engineResults").innerHTML='<div class="se-empty">搜索中...</div>';
-    fetch(SEARCH_API+"/search?q="+encodeURIComponent(q))
+    fetch(APIGateway.pick("search")+"/search?q="+encodeURIComponent(q))
       .then(function(r){return r.json();})
       .then(function(d){
         btn.textContent="🔍 搜索"; btn.disabled=false;
@@ -1387,7 +1498,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var url=engineHistory[engineHistIdx];
     var mode=(enginePreviewMode==="read"||engineTempRead)?"read":"proxy";
     var isAuto=(enginePreviewMode==="auto");
-    var browseUrl=SEARCH_API+(mode==="read"?"/read?url=":"/browse?url=")+encodeURIComponent(url);
+    var browseUrl=APIGateway.pick("search")+(mode==="read"?"/read?url=":"/browse?url=")+encodeURIComponent(url);
     wrap.innerHTML='<div class="se-loading">加载中'+(mode==="read"?"（阅读模式）":"")+'...</div>';
     var frame=document.createElement("iframe");
     frame.src=browseUrl;
@@ -2970,6 +3081,46 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   $("addCatBtn").onclick=addCategory;
   $("newCatInput").onkeypress=function(e){if(e.key==="Enter")addCategory();};
   $("exportBtn").onclick=exportData;
+  // ====== 网关选优设置面板 ======
+  function gwRenderStatus(){
+    var el=$("gwStatus"); if(!el) return;
+    var lines=[];
+    ["api","auth","search"].forEach(function(s){
+      var cur=APIGateway.pick(s);
+      var custom=APIGateway.getCustom(s);
+      lines.push(s+"：当前 "+cur+(custom?"（含自定义保留 "+custom+"）":""));
+    });
+    el.textContent=lines.join(String.fromCharCode(10));
+  }
+  function gwLoadInputs(){
+    ["api","auth","search"].forEach(function(s){
+      var el=$("gwCustom"+s.charAt(0).toUpperCase()+s.slice(1));
+      if(el) el.value=APIGateway.getCustom(s);
+    });
+  }
+  var gwSaveBtn=$("gwSaveBtn"), gwTestBtn=$("gwTestBtn");
+  if(gwSaveBtn){
+    gwSaveBtn.onclick=function(){
+      ["api","auth","search"].forEach(function(s){
+        var el=$("gwCustom"+s.charAt(0).toUpperCase()+s.slice(1));
+        if(el){ var v=el.value.trim(); APIGateway.setCustom(s, v); }
+      });
+      gwRenderStatus();
+      showToast("备用节点已保存", null, null);
+    };
+  }
+  if(gwTestBtn){
+    gwTestBtn.onclick=function(){
+      var el=$("gwStatus"); if(el) el.textContent="正在测速...";
+      APIGateway.refresh().then(function(){
+        gwRenderStatus();
+        showToast("测速完成，已自动切换", null, null);
+      });
+    };
+  }
+  gwLoadInputs();
+  gwRenderStatus();
+
   $("importBtn").onclick=function(){$("importFile").click();};
   $("importFile").onchange=importData;
   $("importThemeBtn").onclick=function(){$("importThemeFile").click();};
@@ -3001,7 +3152,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     };
   }
   window.addEventListener("message",function(ev){
-    if(!ev||!ev.origin||ev.origin!==SEARCH_API) return;
+    if(!ev||!ev.origin||ev.origin!==APIGateway.pick("search")) return;
     var d=null;
     if(typeof ev.data==="string"){ try{ d=JSON.parse(ev.data); }catch(e){ return; } } else { d=ev.data; }
     if(!d||d.t!=="nav"||!d.url) return;
