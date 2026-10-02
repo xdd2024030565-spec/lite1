@@ -207,6 +207,7 @@ function load(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):(f
 function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function $(id){return document.getElementById(id)}
+function esc(s){return String(s==null?'':s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
 let toastTimer=null;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
 // ===== 默认数据 =====
