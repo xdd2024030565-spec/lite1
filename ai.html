@@ -171,7 +171,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
     <div class="form-actions"><button class="btn primary" id="toolsClose">完成</button></div>
   </div>
 </div>
-<div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">取消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
+<div class="modal-mask" id="mcpModal"><div class="modal"><h2>MCP 服务器</h2><div class="form-row"><label>名称</label><input id="mName" placeholder="例如：GitHub MCP"></div><div class="form-row"><label>地址</label><input id="mUrl" placeholder="https://mcp.example.com/mcp"></div><div class="form-row"><label>Bearer Token（可选）</label><input id="mToken" type="password"></div><div class="form-row"><label>额外 Headers（JSON，可选）</label><input id="mHeaders" placeholder='{"X-Key":"value"}'></div><div class="form-actions"><button class="btn" id="mCancel">��消</button><button class="btn primary" id="mSave">保存并拉取工具</button></div></div></div>
 <div class="modal-mask" id="pluginModal"><div class="modal"><h2>添加插件</h2><div class="form-row"><label>名称</label><input id="plName"></div><div class="form-row"><label>类型</label><select id="plType"><option value="openapi">OpenAPI 插件</option><option value="custom">自定义 JSON 工具</option></select></div><div class="form-row"><label>OpenAPI 地址或 JSON</label><textarea id="plOpenapi" rows="4"></textarea></div><div id="customFields" style="display:none"><div class="form-row"><label>工具名称</label><input id="cName"></div><div class="form-row"><label>描述</label><input id="cDesc"></div><div class="form-row"><label>URL</label><input id="cUrl"></div><div class="form-row"><label>方法</label><select id="cMethod"><option>GET</option><option>POST</option></select></div><div class="form-row"><label>Headers（JSON）</label><input id="cHeaders"></div><div class="form-row"><label>参数 JSON Schema</label><textarea id="cSchema" rows="3"></textarea></div></div><div class="form-actions"><button class="btn" id="plCancel">取消</button><button class="btn primary" id="plSave">保存</button></div></div></div>
 <div class="modal-mask" id="settingsModal"><div class="modal"><h2>设置</h2><p class="sub">生成参数、网络与数据分开管理。</p><div class="tabs"><button type="button" class="on" data-tab="s-gen">生成</button><button type="button" data-tab="s-net">网络</button><button type="button" data-tab="s-data">数据</button></div><div class="tab-pane on" id="s-gen"><div class="form-row"><label>温度 <span id="tempVal">0.7</span></label><input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7"></div><div class="form-row"><label>最大 Tokens</label><input type="number" id="setMaxTokens" min="1" max="128000" value="2048"></div></div><div class="tab-pane" id="s-net"><div class="form-row"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="setUseProxy" style="width:auto"> 始终通过代理访问 API</label><div class="hint">已知会被浏览器拦截的接口会自动走代理。</div></div><div class="form-row"><label>代理地址</label><input id="setProxyBase" placeholder="https://ai.yongjiu.ccwu.cc"></div></div><div class="tab-pane" id="s-data"><div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" id="btnExport" type="button">导出配置</button><button class="btn small" id="btnImport" type="button">导入配置</button><button class="btn small danger" id="btnWipe" type="button">清空全部</button></div><div class="hint">导出包含密钥，请妥善保管。</div><input type="file" id="importFile" accept=".json" style="display:none"></div><div class="form-actions"><button class="btn" id="settingsCancel">取消</button><button class="btn primary" id="settingsSave">保存</button></div></div></div>
 <div class="toast" id="toast"></div>
@@ -196,7 +196,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 
     try{ localStorage.setItem('gw_custom_'+service, url||''); }catch(e){}
   }
 
-  // 健康检查：GET /health 或根路径，3 秒超时
+  // 健康检查：GET /health 或根路��，3 秒超时
   function test(url){
     return new Promise(function(resolve){
       var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -430,8 +430,9 @@ $('btnNew').onclick=newSession;$('btnNew2').onclick=newSession;
 function renderMsgs(){
   const s=curSession();const el=$('msgs');
   if(!s){el.innerHTML='<div class="empty"><div class="big">✦</div><h2>开始一次对话</h2>选择左侧模型，或先添加提供商<br><button class="btn primary" style="margin-top:14px" onclick="newSession()">新对话</button></div>';return}
-  el.innerHTML=s.messages.map(m=>{
+  el.innerHTML=s.messages.map((m,__i)=>{
     if(m.role==='system')return '';
+    if(m._error){return '<div class="msg"><div class="role">系统</div><div class="bubble" style="border-color:var(--danger)">'+esc(m.content||'')+'<div style="display:flex;gap:8px;margin-top:10px"><button class="btn small" onclick="retryLast()">重试</button><button class="btn small primary" onclick="continueLast()">继续生成</button></div></div></div>';}
     if(m.role==='tool'){
       return '<div class="msg"><div class="role">工具 · '+esc(m.name||'')+'</div><div class="bubble" style="background:var(--bg2);font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap">'+esc(String(m.content||'').slice(0,2000))+'</div></div>';
     }
@@ -441,7 +442,8 @@ function renderMsgs(){
     }
     let reasoningHtml='';
     if(m.reasoning){reasoningHtml='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>🤔 思考过程 ('+Math.round(m.reasoning.length/100)/10+'k 字)</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
-    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble">'+reasoningHtml+md(m.content||'')+'</div></div>';
+    const bubbleId=m._streaming?' id="streamBubble"':'';
+    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+reasoningHtml+md(m.content||'')+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
@@ -456,6 +458,30 @@ function md(t){
   s=s.replace(/^- (.*)$/gm,'<li>$1</li>').replace(/^\d+\. (.*)$/gm,'<li>$1</li>');
   s=s.replace(/\n/g,'<br>');
   return s;
+}
+// 流式期间只重绘当前气泡，避免整表重建卡顿
+let _rafPending=false,_streamDirty=false;
+function renderStreamThrottled(){
+  if(_rafPending)return;
+  _rafPending=true;
+  requestAnimationFrame(()=>{
+    _rafPending=false;
+    if(!_streamDirty)return;
+    _streamDirty=false;
+    patchStreamBubble();
+  });
+}
+function patchStreamBubble(){
+  const el=document.getElementById('streamBubble');
+  const st=curSession();
+  if(!el||!st)return;
+  const m=st.messages.find(x=>x.role==='assistant'&&x._streaming);
+  if(!m)return;
+  let pre='';
+  if(m.reasoning){pre='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>思考中…</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
+  el.innerHTML=pre+md(m.content||'');
+  const box=document.getElementById('msgs');
+  if(box)box.scrollTop=box.scrollHeight;
 }
 function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatus();renderToolsModal();}
 
@@ -777,20 +803,27 @@ async function chatStreamFull(messages,onDelta){
 
 // ===== 对话主循环 =====
 let sending=false;
+let lastError='';
 let stopFlag=false;
 async function sendMessage(){
   if(sending)return;
-  const inp=$('input');const text=inp.value.trim();
+  const inp=$("input");const text=inp.value.trim();
   if(!text){return}
   let s=curSession();
   if(!s){newSession();s=curSession();}
-  s.messages.push({role:'user',content:text});
-  inp.value='';autoGrow();
+  s.messages.push({role:"user",content:text});
+  inp.value="";autoGrow();
   renderMsgs();
+  await runCompletion();
+}
+async function runCompletion(){
+  let s=curSession();
+  if(!s){newSession();s=curSession();}
   sending=true;$('sendBtn').disabled=true;$('sendBtn').style.display='none';$('stopBtn').style.display='';
   stopFlag=false;
   const p=activeProvider();
-  if(p&&p.sys)s.messages.unshift({role:'system',content:p.sys});
+  // 只在没有系统消息时插入，避免多次重试重复叠加
+  if(p&&p.sys){s.messages=s.messages.filter(m=>m.role!=="system");s.messages.unshift({role:"system",content:p.sys});}
   try{
     const tools=collectTools();
     const msgs=s.messages.filter(m=>m.role!=='system'||m===s.messages[0]);
@@ -799,15 +832,23 @@ async function sendMessage(){
       let lastContent='';
       const partial=await chatStreamFull(msgs,(full,reasoningText)=>{
         lastContent=full;
-        const existing=s.messages.find(m=>m.role==='assistant'&&m._streaming);
-        if(existing){existing.content=full;if(reasoningText)existing.reasoning=reasoningText;}
-        else{s.messages.push({role:'assistant',content:full,reasoning:reasoningText||'',_streaming:true});}
-        // 自动命名
-        if(!s.title||s.title==='新对话'){const first=s.messages.find(m=>m.role==='user');if(first&&first.content)s.title=String(first.content).slice(0,16);}
-        renderMsgs();
+        let existing=s.messages.find(m=>m.role==='assistant'&&m._streaming);
+        if(!existing){
+          // 首帧：插入占位并全量渲染一次，之后只增量更新气泡
+          s.messages.push({role:'assistant',content:full,reasoning:reasoningText||'',_streaming:true});
+          if(!s.title||s.title==='新对话'){const first=s.messages.find(m=>m.role==='user');if(first&&first.content)s.title=String(first.content).slice(0,16);}
+          renderMsgs();
+          const box=$('msgs');if(box)box.scrollTop=box.scrollHeight;
+          _streamDirty=true;renderStreamThrottled();
+          return;
+        }
+        existing.content=full;
+        if(reasoningText)existing.reasoning=reasoningText;
+        _streamDirty=true;
+        renderStreamThrottled();
       });
       s.messages=s.messages.filter(m=>!(m._streaming));
-      if(partial.content){s.messages.push({role:'assistant',content:partial.content,reasoning:partial.reasoning||''});}
+      if(partial.content||partial.reasoning){s.messages.push({role:'assistant',content:partial.content||'',reasoning:partial.reasoning||''});}
       const tcs=partial.toolCalls||[];
       if(tcs.length&&!stopFlag){
         s.messages.push({role:'assistant',content:partial.content||'',toolCalls:tcs});
@@ -825,10 +866,36 @@ async function sendMessage(){
       break;
     }
   }catch(e){
-    s.messages.push({role:'assistant',content:'⚠️ 出错了：'+e.message});
+    const partialMsg=s.messages.find(m=>m.role==='assistant'&&m._streaming);
+    const kept=partialMsg?(partialMsg.content||''):'';
+    const keptReason=partialMsg?(partialMsg.reasoning||''):'';
+    s.messages=s.messages.filter(m=>!(m._streaming));
+    if(kept){s.messages.push({role:'assistant',content:kept,reasoning:keptReason});}
+    const raw=String((e&&e.message)||e||'未知错误');
+    const kind=/HTTP 401|HTTP 403|未设置 API Key|未配置/.test(raw)?'配置错误':(/(500|502|503|504|Failed to fetch|NetworkError|ECONNRESET|timeout|超时)/i.test(raw)?'网络或服务异常':'其他错误');
+    s.messages.push({role:'assistant',content:'⚠️ '+kind+'：'+raw,_error:true});
+    lastError=raw;
   }
   sending=false;$('sendBtn').disabled=false;stopFlag=false;$('sendBtn').style.display='';$('stopBtn').style.display='none';
   renderMsgs();persist();
+}
+
+// 重试：删掉错误卡片，用相同历史再请求一次
+async function retryLast(){
+  const st=curSession();
+  if(!st||sending)return;
+  for(let i=st.messages.length-1;i>=0;i--){if(st.messages[i]._error){st.messages.splice(i,1);break}}
+  renderMsgs();
+  await runCompletion();
+}
+// 继续：保留已生成内容，追加继续指令
+async function continueLast(){
+  const st=curSession();
+  if(!st||sending)return;
+  for(let i=st.messages.length-1;i>=0;i--){if(st.messages[i]._error){st.messages.splice(i,1);break}}
+  st.messages.push({role:'user',content:'请从上次中断处继续，不要重复已输出的内容。'});
+  renderMsgs();
+  await runCompletion();
 }
 $('sendBtn').onclick=sendMessage;
 $('stopBtn').onclick=()=>{stopFlag=true;};
