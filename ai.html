@@ -1472,7 +1472,7 @@ function buildSystemPrompt(userSys,tools){
     segs.push(describeTools(tools));
   }
   if(sk){if(segs.length)segs.push('');segs.push(sk);}
-  return segs.join(NL)+NL+NL+base;
+  return segs.join('\n')+'\n'+'\n'+base;
 }
 function collectTools(){
   const tools=[];
