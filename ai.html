@@ -578,7 +578,18 @@ const DEFAULT_PROVIDERS=[
 const DEFAULT_BUILTIN=[
   {id:'web_search',name:'网页搜索',desc:'经搜索API搜索网页',enabled:true},
   {id:'fetch_url',name:'网页抓取',desc:'抓取指定URL文本内容',enabled:true},
-  {id:'now_time',name:'当前时间',desc:'获取当前日期时间',enabled:true}
+  {id:'now_time',name:'当前时间',desc:'获取当前日期时间',enabled:true},
+  {id:'calc',name:'计算器',desc:'四则运算与数学表达式计算',enabled:true},
+  {id:'unit_convert',name:'单位换算',desc:'长度/重量/温度/数据单位换算',enabled:true},
+  {id:'random_num',name:'随机数',desc:'生成指定范围的随机整数',enabled:true},
+  {id:'uuid_gen',name:'UUID 生成',desc:'生成随机 UUID v4',enabled:true},
+  {id:'base64',name:'Base64 编解码',desc:'文本与 Base64 互转',enabled:true},
+  {id:'url_codec',name:'URL 编解码',desc:'URL 编码与解码',enabled:true},
+  {id:'json_tool',name:'JSON 工具',desc:'JSON 校验/格式化/压缩',enabled:true},
+  {id:'http_req',name:'HTTP 请求',desc:'发送 GET/POST 请求并返回响应',enabled:true},
+  {id:'weather',name:'天气查询',desc:'查询城市当前天气',enabled:true},
+  {id:'currency',name:'汇率换算',desc:'查询实时汇率并换算',enabled:true},
+  {id:'translate',name:'文本翻译',desc:'调用免费翻译接口翻译文本',enabled:true}
 ];
 const DEFAULT_SKILLS=[
   {id:'sk_code_review',name:'代码审查',desc:'逐条指出问题并给出修复建议',enabled:false,
@@ -1480,6 +1491,17 @@ function collectTools(){
     if(t.id==='web_search')tools.push({type:'function',function:{name:'web_search',description:'搜索网页，返回相关链接和摘要。参数 query 为搜索关键词。',parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词'}},required:['query']}}});
     if(t.id==='fetch_url')tools.push({type:'function',function:{name:'fetch_url',description:'抓取指定 URL 的网页文本内容。参数 url 为目标网址。',parameters:{type:'object',properties:{url:{type:'string'}},required:['url']}}});
     if(t.id==='now_time')tools.push({type:'function',function:{name:'now_time',description:'获取当前日期和时间。',parameters:{type:'object',properties:{}}}});
+    if(t.id==='calc')tools.push({type:'function',function:{name:'calc',description:'计算数学表达式（四则运算、幂、括号、常用函数），返回计算结果。参数 expression 为要计算的表达式。',parameters:{type:'object',properties:{expression:{type:'string',description:'数学表达式，如 (2+3)*4'}},required:['expression']}}});
+    if(t.id==='unit_convert')tools.push({type:'function',function:{name:'unit_convert',description:'单位换算：长度(m/km/cm/mm/ft/in)、重量(kg/g/lb/oz)、温度(C/F/K)、数据(B/KB/MB/GB)。参数 value 数值、from 原单位、to 目标单位。',parameters:{type:'object',properties:{value:{type:'number',description:'数值'},from:{type:'string',description:'原单位'},to:{type:'string',description:'目标单位'}},required:['value','from','to']}}});
+    if(t.id==='random_num')tools.push({type:'function',function:{name:'random_num',description:'生成指定范围的随机整数。参数 min 最小值（含）、max 最大值（含）。',parameters:{type:'object',properties:{min:{type:'integer',description:'最小值，默认1'},max:{type:'integer',description:'最大值，默认100'}},required:['max']}}});
+    if(t.id==='uuid_gen')tools.push({type:'function',function:{name:'uuid_gen',description:'生成一个随机 UUID v4 字符串。无参数。',parameters:{type:'object',properties:{}}}});
+    if(t.id==='base64')tools.push({type:'function',function:{name:'base64',description:'Base64 编解码。参数 text 为文本，mode 为 encode（编码）或 decode（解码）。',parameters:{type:'object',properties:{text:{type:'string',description:'要处理的文本'},mode:{type:'string',description:'encode 或 decode，默认 encode'}},required:['text']}}});
+    if(t.id==='url_codec')tools.push({type:'function',function:{name:'url_codec',description:'URL 编解码。参数 text 为文本，mode 为 encode（编码）或 decode（解码）。',parameters:{type:'object',properties:{text:{type:'string',description:'要处理的文本'},mode:{type:'string',description:'encode 或 decode，默认 encode'}},required:['text']}}});
+    if(t.id==='json_tool')tools.push({type:'function',function:{name:'json_tool',description:'JSON 工具：校验合法性、格式化或压缩。参数 json 为 JSON 文本，mode 为 format（格式化）或 minify（压缩）或 validate（校验）。',parameters:{type:'object',properties:{json:{type:'string',description:'JSON 文本'},mode:{type:'string',description:'format/minify/validate，默认 validate'}},required:['json']}}});
+    if(t.id==='http_req')tools.push({type:'function',function:{name:'http_req',description:'发送 HTTP 请求。参数 url 目标地址、method 方法(GET/POST)、body 请求体(可选)、headers 请求头(可选 JSON 对象)。返回状态码和响应文本。',parameters:{type:'object',properties:{url:{type:'string',description:'目标 URL'},method:{type:'string',description:'GET 或 POST，默认 GET'},body:{type:'string',description:'POST 请求体'},headers:{type:'object',description:'请求头 JSON 对象'}},required:['url']}}});
+    if(t.id==='weather')tools.push({type:'function',function:{name:'weather',description:'查询城市当前天气（使用 wttr.in 免费接口）。参数 city 为城市名（可含国家，如 Beijing 或 北京）。',parameters:{type:'object',properties:{city:{type:'string',description:'城市名'}},required:['city']}}});
+    if(t.id==='currency')tools.push({type:'function',function:{name:'currency',description:'汇率换算（使用 open.er-api.com 免费接口）。参数 amount 金额、from 原币种(如 CNY/USD/EUR/JPY)、to 目标币种。',parameters:{type:'object',properties:{amount:{type:'number',description:'金额'},from:{type:'string',description:'原币种代码'},to:{type:'string',description:'目标币种代码'}},required:['amount','from','to']}}});
+    if(t.id==='translate')tools.push({type:'function',function:{name:'translate',description:'文本翻译（使用 mymemory 免费接口）。参数 text 原文、to 目标语言代码(zh/en/ja/ko/fr/de/es 等)。',parameters:{type:'object',properties:{text:{type:'string',description:'要翻译的文本'},to:{type:'string',description:'目标语言代码，默认 en'}},required:['text']}}});
   });
   mcpServers.filter(s=>s.enabled!==false).forEach(s=>{(s.tools||[]).forEach(t=>{
     tools.push({type:'function',function:{name:'mcp_'+s.id+'_'+t.name,description:(t.description||'')+'（通过 MCP 服务器 '+s.name+' 调用）',parameters:t.inputSchema||{type:'object',properties:{}}}});
@@ -1557,6 +1579,107 @@ function tryParse(s){try{return JSON.parse(s)}catch(e){return null}}
 // 内置工具执行
 async function runTool(name,args){
   if(name==='now_time'){return new Date().toLocaleString('zh-CN',{hour12:false})}
+  // 计算器
+  if(name==='calc'){
+    try{
+                      const expr=String(args.expression||'').replace(/[^0-9a-zA-Z+*/().%^, -]/g,'').slice(0,200);
+      if(!expr)return '请输入表达式';
+                                    const safe=expr.split('^').join('**').replace(/(sqrt|sin|cos|tan|log|ln|abs|round|floor|ceil|min|max|PI|E)/g,'Math.$1');
+      const r=Function('return ('+safe+')')();
+      return String(r);
+    }catch(e){return '计算失败: '+e.message}
+  }
+  // 单位换算
+  if(name==='unit_convert'){
+    const val=Number(args.value);
+    const f=String(args.from||'').toLowerCase(),t=String(args.to||'').toLowerCase();
+    const LEN={m:1,km:1000,cm:0.01,mm:0.001,ft:0.3048,in:0.0254};const W={kg:1,g:0.001,lb:0.453592,oz:0.0283495};const T={c:1,f:{c:v=> (v-32)*5/9},k:{c:v=>v-273.15}};const D={b:1,kb:1024,mb:1048576,gb:1073741824};
+    const conv=(v,fn,to)=>{const base=typeof fn==='function'?fn(v):(fn&&fn[to]?fn[to](v):v*(fn||1));return base;};
+    try{
+      if(LEN[f]!==undefined&&LEN[t]!==undefined)return val*LEN[f]/LEN[t]+' '+t;
+      if(W[f]!==undefined&&W[t]!==undefined)return val*W[f]/W[t]+' '+t;
+      if(T[f]&&T[t]){let c=typeof T[f]==='function'?T[f](val):(T[f].c?T[f].c(val):val);if(t==='c')return c+' C';if(t==='f')return (c*9/5+32)+' F';if(t==='k')return (c+273.15)+' K';}
+      if(D[f]!==undefined&&D[t]!==undefined)return val*D[f]/D[t]+' '+t;
+      return '暂不支持该单位换算: '+f+' -> '+t;
+    }catch(e){return '换算失败: '+e.message}
+  }
+  // 随机数
+  if(name==='random_num'){
+    const mn=Number(args.min||1),mx=Number(args.max||100);
+    if(mx<mn)return '最大值不能小于最小值';
+    return String(Math.floor(Math.random()*(mx-mn+1))+mn);
+  }
+  // UUID
+  if(name==='uuid_gen'){
+    const g=(n)=>{const c='0123456789abcdef';let x='';for(let i=0;i<n;i++)x+=c[Math.floor(Math.random()*16)];return x;};
+    return g(8)+'-'+g(4)+'-4'+g(3)+'-'+(8+Math.floor(Math.random()*4)).toString(16)+g(3)+'-'+g(12);
+  }
+  // Base64
+  if(name==='base64'){
+    try{
+      if((args.mode||'encode')==='decode'){
+        const b=atob(String(args.text).replace(/s+/g,''));
+        const arr=Uint8Array.from(b,function(x){return x.charCodeAt(0)});
+        return new TextDecoder().decode(arr);
+      }
+      return btoa(unescape(encodeURIComponent(String(args.text))));
+    }catch(e){return 'Base64 处理失败: '+e.message}
+  }
+  // URL 编解码
+  if(name==='url_codec'){
+    try{
+      return (args.mode||'encode')==='decode'?decodeURIComponent(String(args.text)):encodeURIComponent(String(args.text));
+    }catch(e){return 'URL 处理失败: '+e.message}
+  }
+  // JSON 工具
+  if(name==='json_tool'){
+    try{
+      const j=JSON.parse(String(args.json||''));
+      const mode=args.mode||'validate';
+      if(mode==='format')return JSON.stringify(j,null,2);
+      if(mode==='minify')return JSON.stringify(j);
+      return 'JSON 合法：'+Object.keys(j).length+' 个顶层键';
+    }catch(e){return 'JSON 解析失败: '+e.message}
+  }
+  // HTTP 请求
+  if(name==='http_req'){
+    try{
+      const opt={method:String(args.method||'GET').toUpperCase(),headers:{'User-Agent':'Mozilla/5.0'}};
+      if(args.headers&&typeof args.headers==='object')Object.assign(opt.headers,args.headers);
+      if(args.body&&opt.method==='POST')opt.body=String(args.body);
+      const r=await fetch(String(args.url),opt);
+      const t=await r.text();
+      return 'HTTP '+r.status+'\n'+String(t).slice(0,4000);
+    }catch(e){return 'HTTP 请求失败: '+e.message}
+  }
+  // 天气
+  if(name==='weather'){
+    try{
+      const r=await fetch('https://wttr.in/'+encodeURIComponent(String(args.city||''))+'?format=j1&lang=zh');
+      const j=await r.json();
+      const c=(j.current_condition||[])[0]||{};
+      const w=(j.nearest_area||[])[0]||{};
+      return '城市:'+((w.areaName||[])[0]||{}).value+' 天气:'+((c.lang_zh||[])[0]||{}).value+' 温度:'+c.temp_C+'°C 体感:'+c.FeelsLikeC+'°C 湿度:'+c.humidity+'% 风速:'+c.windspeedKmph+'km/h';
+    }catch(e){return '天气查询失败: '+e.message}
+  }
+  // 汇率
+  if(name==='currency'){
+    try{
+      const r=await fetch('https://open.er-api.com/v6/latest/'+encodeURIComponent(String(args.from||'USD').toUpperCase()));
+      const j=await r.json();
+      const rate=(j.rates||{})[String(args.to||'').toUpperCase()];
+      if(!rate)return '找不到汇率: '+args.to;
+      return String(Number(args.amount||1)*rate).slice(0,12)+' '+String(args.to).toUpperCase()+' (1 '+String(args.from).toUpperCase()+' = '+rate+' '+String(args.to).toUpperCase()+')';
+    }catch(e){return '汇率查询失败: '+e.message}
+  }
+  // 翻译
+  if(name==='translate'){
+    try{
+      const r=await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(String(args.text||'').slice(0,500))+'&langpair=en|'+encodeURIComponent(String(args.to||'en')));
+      const j=await r.json();
+      return String((j.responseData||{}).translatedText||'翻译失败').slice(0,2000);
+    }catch(e){return '翻译失败: '+e.message}
+  }
   if(name==='web_search'){
     try{
       const q=encodeURIComponent(args.query||'');
