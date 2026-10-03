@@ -34,6 +34,13 @@
       "name": "css主题"
     }
   ],
+  "folders": [
+    {
+      "id": "mus893b8v2fdy",
+      "name": "中转",
+      "categoryId": "mtpf5a1lzn0d3"
+    }
+  ],
   "links": [
     {
       "id": "mus3si2r33mks",
@@ -42,7 +49,8 @@
       "categoryId": "mtpf5a1lzn0d3",
       "note": "",
       "pinned": false,
-      "added": "2026-10-03T08:01:41.763Z"
+      "added": "2026-10-03T08:01:41.763Z",
+      "fldId": "mus893b8v2fdy"
     },
     {
       "id": "muqvvk0020j3a",
