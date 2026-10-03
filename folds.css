@@ -1,0 +1,83 @@
+/* ===== 折叠小类（Folds）样式 ===== */
+/* 折叠态：堆叠图标 + 名称 + 数量；展开态：就地渲染组内网址 */
+
+.fold-card{background:var(--card);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+
+.fold-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;background:transparent;border:none;width:100%;font-family:inherit;text-align:left;transition:background .15s var(--ease)}
+.fold-head:hover,.fold-head:active{background:var(--accent-bg)}
+.fold-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* 堆叠图标：三层 favicon 错位叠放 */
+.fold-stack{position:relative;width:40px;height:32px;flex-shrink:0}
+.fold-stack .fold-chip{position:absolute;top:0;width:26px;height:26px;border-radius:7px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:var(--fg2);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.10);transition:transform .18s var(--ease)}
+.fold-stack .fold-chip img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.fold-stack .fold-chip:nth-child(1){left:0;z-index:3}
+.fold-stack .fold-chip:nth-child(2){left:7px;z-index:2;transform:translateY(-2px) scale(.94)}
+.fold-stack .fold-chip:nth-child(3){left:14px;z-index:1;transform:translateY(-4px) scale(.88)}
+.fold-head:hover .fold-stack .fold-chip:nth-child(2){transform:translateY(-2px) scale(.94) translateX(2px)}
+.fold-head:hover .fold-stack .fold-chip:nth-child(3){transform:translateY(-4px) scale(.88) translateX(4px)}
+
+.fold-info{flex:1;min-width:0}
+.fold-name{font-size:1.02rem;font-weight:600;word-break:break-word;display:flex;align-items:center;gap:6px}
+.fold-name .fold-emoji{font-size:.95rem}
+.fold-meta{font-size:.78rem;color:var(--fg2);margin-top:1px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.fold-meta .dot{color:var(--border)}
+.fold-chevron{font-size:.7rem;color:var(--fg2);transition:transform .2s var(--ease);flex-shrink:0}
+.fold-card.open .fold-chevron{transform:rotate(90deg)}
+
+/* 展开容器：max-height 过渡（与侧栏折叠同一套写法） */
+.fold-body{max-height:0;overflow:hidden;transition:max-height .22s var(--ease)}
+.fold-body-inner{padding:0 12px 12px}
+.fold-body .link-list{margin:0}
+.fold-body .link-card{background:var(--bg2);margin-bottom:8px}
+.fold-body .link-card:last-child{margin-bottom:0}
+.fold-empty{padding:14px;text-align:center;color:var(--fg2);font-size:.85rem}
+
+/* 折叠卡片上的轻量操作按钮 */
+.fold-actions{display:flex;gap:2px;flex-shrink:0}
+.fold-actions button{border:none;background:transparent;color:var(--fg2);font-size:.75rem;padding:5px 8px;border-radius:7px;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.fold-actions button:hover{color:var(--accent);background:var(--accent-bg)}
+.fold-actions button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
+
+/* 网址卡片上的「折叠」小按钮：不抢视觉，hover/触屏才明显 */
+.link-fold-btn{font-size:.72rem;padding:4px 8px;border-radius:7px;border:1px dashed var(--border);background:transparent;color:var(--fg2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;opacity:.75}
+.link-fold-btn:hover{opacity:1;border-style:solid;border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+@media(hover:hover){.link-fold-btn{opacity:0} .link-card:hover .link-fold-btn,.link-fold-btn:focus-visible{opacity:.75}}
+
+/* 「折叠到」选择器（新建 / 编辑面板内） */
+.fold-picker{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.fold-picker label{font-size:.72rem;color:var(--fg2);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.fold-picker select{flex:1;margin-bottom:0}
+
+/* 折叠小类管理页 */
+.fold-item{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.fold-item-info{flex:1;min-width:0}
+.fold-item-name{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.fold-item-sub{font-size:.78rem;color:var(--fg2);margin-top:2px}
+.fold-item-actions{display:flex;gap:2px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.fold-item-actions button{border:none;background:transparent;color:var(--fg2);font-size:.78rem;padding:5px 8px;border-radius:7px;cursor:pointer;font-family:inherit;transition:all .15s}
+.fold-item-actions button:hover{color:var(--accent);background:var(--accent-bg)}
+.fold-item-actions button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
+.fold-add-form{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.fold-add-form input{flex:1;min-width:120px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--fg);font-size:.95rem;font-family:inherit}
+.fold-add-form input:focus{outline:none;border-color:var(--accent)}
+.fold-add-form select{padding:12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--fg);font-size:.9rem;font-family:inherit;max-width:140px}
+.fold-add-form button{padding:12px 20px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+
+/* 折叠到指定组的弹层 */
+.fold-pop-overlay{position:fixed;inset:0;z-index:530;display:flex;align-items:center;justify-content:center;padding:20px}
+.fold-pop-mask{position:absolute;inset:0;background:rgba(0,0,0,.28)}
+.fold-pop{position:relative;width:min(400px,100%);max-height:80vh;display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 10px 40px rgba(0,0,0,.22);animation:foldPopIn .18s var(--ease)}
+@keyframes foldPopIn{from{opacity:.6;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+.fold-pop-head{padding:14px 16px;border-bottom:1px solid var(--border);font-size:.95rem;font-weight:700;display:flex;align-items:center;gap:8px}
+.fold-pop-head button{margin-left:auto;border:1px solid var(--border);background:var(--card);color:var(--fg);border-radius:8px;width:30px;height:30px;cursor:pointer;font-family:inherit}
+.fold-pop-body{overflow-y:auto;padding:12px 14px}
+.fold-pop-sec{font-size:.72rem;font-weight:700;color:var(--fg2);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px}
+.fold-pop-sec:first-child{margin-top:0}
+.fold-pop-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:background .15s;border:1px solid transparent;width:100%;font-family:inherit;text-align:left;color:var(--fg)}
+.fold-pop-item:hover{background:var(--accent-bg);border-color:var(--accent)}
+.fold-pop-item .fold-pop-name{flex:1;min-width:0;font-size:.92rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fold-pop-item .fold-pop-sub{font-size:.74rem;color:var(--fg2);flex-shrink:0}
+.fold-pop-new{width:100%;padding:11px;border:1px dashed var(--border);border-radius:10px;background:transparent;color:var(--fg2);font-size:.88rem;cursor:pointer;font-family:inherit;margin-top:4px}
+.fold-pop-new:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+@media(max-width:480px){.fold-head{padding:12px}.fold-actions button{padding:5px 6px}.fold-stack{width:36px;height:30px}}
