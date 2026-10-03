@@ -1,0 +1,66 @@
+name: Apply folds patch
+
+# 手工触发：把折叠小类（Folds）功能接入 index.html。
+# 幂等，可安全重复运行；运行后把改动提交回当前分支。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Apply patch
+        run: python3 scripts/patch_index.py
+
+      - name: Verify result
+        run: |
+          echo "--- 接入点检查 ---"
+          grep -c "FOLDS_PATCHED" index.html || true
+          grep -c "folds.css" index.html || true
+          grep -c "folds.js" index.html || true
+          python3 - <<'PY'
+          import io, sys
+          html = io.open("index.html", encoding="utf-8").read()
+          checks = {
+              "folds 字段": "folds:[]" in html,
+              "normalize 调用": "Folds.normalize" in html,
+              "折叠渲染": "Folds.render(" in html,
+              "折叠管理容器": "foldListContainer" in html,
+              "事件委托": 'act==="foldtoggle"' in html,
+              "刷新必折叠": "collapseAllOnLoad" in html,
+              "卡片折叠按钮": "linkFoldBtn" in html,
+              "保存带 folds": "folds:(S.folds||[])" in html,
+          }
+          bad = [k for k, v in checks.items() if not v]
+          if bad:
+              print("::error::缺失接入点: " + ", ".join(bad))
+              sys.exit(1)
+          print("全部接入点已就位 ✅")
+          PY
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            echo "无改动（可能已打过补丁）"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(folds): 折叠小类接入 index.html（堆叠图标/点击展开/刷新必折叠）"
+          git push
