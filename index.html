@@ -329,13 +329,18 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .memo-card.pinned{border-left-color:var(--accent)}
 .memo-card-head{display:flex;align-items:flex-start;gap:12px}
 .memo-card-info{flex:1;min-width:0}
-.memo-card-title{font-size:1rem;font-weight:600;word-break:break-word;margin-bottom:2px}
 .memo-card-meta{font-size:.78rem;color:var(--fg2);word-break:break-all;line-height:1.5}
-.memo-card-body{margin-top:8px;font-size:.88rem;color:var(--fg);white-space:pre-wrap;word-break:break-word;line-height:1.6;max-height:200px;overflow:hidden}
 .memo-card-stat{margin-top:6px;font-size:.72rem;color:var(--fg2)}
 .memo-form-stat{font-size:.75rem;color:var(--fg2);margin:-4px 0 10px;text-align:right}
 .memo-check{display:flex;align-items:center;gap:6px;font-size:.85rem;margin-bottom:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;color:var(--fg)}
 .memo-check input{cursor:pointer;accent-color:var(--accent)}
+/* 卡片内联编辑 */
+.memo-card-title-input{font-size:1rem;font-weight:600;border:1px solid transparent;background:transparent;color:var(--fg);width:100%;padding:2px 4px;margin-bottom:2px;font-family:inherit;border-radius:4px;outline:none;box-sizing:border-box;transition:border-color .15s,background .15s}
+.memo-card-title-input:focus{border-color:var(--accent);background:var(--bg)}
+.memo-card-body-input{margin-top:8px;font-size:.88rem;color:var(--fg);width:100%;border:1px solid transparent;background:transparent;white-space:pre-wrap;word-break:break-word;line-height:1.6;overflow:hidden;font-family:inherit;resize:none;outline:none;padding:2px 4px;border-radius:4px;box-sizing:border-box;transition:border-color .15s,background .15s}
+.memo-card-body-input:focus{border-color:var(--accent);background:var(--bg)}
+.memo-card-input-readonly{cursor:default}
+.memo-card-input-readonly:focus{border-color:transparent;background:transparent}
 </style>
 </head>
 <body>
@@ -2724,7 +2729,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   var MEMO_SYNC_DEFAULT="https://vault-sync.yongjiu.ccwu.cc/memo/e93ab464dbb0413bc4ba581d4fcac5d3";
   var MEMO_LIMITS={title:200,body:20000,folder:40,tag:24,tags:20,items:2000};
   var M={items:[],query:"",folder:"all",tag:"all",editingId:null,showDeleted:false,syncBusy:false};
-  var memoAutosaveTimer=null,memoSearchTimer=null;
+  var memoAutosaveTimer=null,memoSearchTimer=null,memoInlineTimer=null;
 
   function memoStr(v,max){
     if(typeof v==="string") return v.length>max?v.slice(0,max):v;
@@ -2889,8 +2894,9 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     el.textContent=ts?("上次同步："+new Date(ts).toLocaleString()):"尚未同步";
   }
   function memoRenderSyncBar(){
-    var b=$("memoSyncBtn");
-    if(b){ b.textContent=M.syncBusy?"☁️ 同步中":"☁️ 立即同步"; b.disabled=!!M.syncBusy; }
+    var up=$("memoSyncUpBtn"),down=$("memoSyncDownBtn");
+    if(up){ up.textContent=M.syncBusy?"☁️ 同步中":"⬆️ 上传到云端"; up.disabled=!!M.syncBusy; }
+    if(down){ down.textContent=M.syncBusy?"☁️ 同步中":"⬇️ 从云端拉取"; down.disabled=!!M.syncBusy; }
     memoRenderSyncTs();
   }
   function memoOpenSyncConfig(){
@@ -2904,6 +2910,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   }
   function memoSyncNow(){
     if(M.syncBusy) return;
+    memoFlushInline();
     var meta=memoGetMeta();
     M.syncBusy=true; memoRenderSyncBar();
     showToast("☁️ 正在同步...",null,null);
@@ -2929,6 +2936,33 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       M.syncBusy=false;
       memoRenderSyncBar();
       showToast("同步失败："+((e&&e.message)||e),null,null);
+    });
+  }
+  function memoSyncPull(){
+    if(M.syncBusy) return;
+    memoFlushInline();
+    M.syncBusy=true; memoRenderSyncBar();
+    showToast("⬇️ 正在拉取...",null,null);
+    memoSyncFetch("GET",null).then(function(remote){
+      var rlist=[],i,it;
+      if(remote&&Array.isArray(remote.items)){
+        for(i=0;i<remote.items.length&&rlist.length<MEMO_LIMITS.items;i++){
+          it=memoNorm(remote.items[i]);
+          if(it) rlist.push(it);
+        }
+      }
+      var merged=memoMerge(M.items,rlist);
+      M.items=merged;
+      memoSortItems();
+      memoSave(true);
+      memoSetMeta({lastSyncAt:Date.now()});
+      M.syncBusy=false;
+      memoRender();
+      showToast("✅ 拉取完成",null,null);
+    }).catch(function(e){
+      M.syncBusy=false;
+      memoRenderSyncBar();
+      showToast("拉取失败："+((e&&e.message)||e),null,null);
     });
   }
 
@@ -3079,10 +3113,14 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var add=vEl("button",{class:"vault-add-btn",text:"+ 新建"});
     add.addEventListener("click",function(){ M.editingId="new"; memoRenderForm(); });
     wrap.appendChild(add);
-    var sync=vEl("button",{class:"vault-lock-btn",id:"memoSyncBtn",text:M.syncBusy?"☁️ 同步中":"☁️ 立即同步"});
-    sync.disabled=!!M.syncBusy;
-    sync.addEventListener("click",function(){ memoSyncNow(); });
-    wrap.appendChild(sync);
+    var syncUp=vEl("button",{class:"vault-lock-btn",id:"memoSyncUpBtn",text:M.syncBusy?"☁️ 同步中":"⬆️ 上传到云端"});
+    syncUp.disabled=!!M.syncBusy;
+    syncUp.addEventListener("click",function(){ memoSyncNow(); });
+    wrap.appendChild(syncUp);
+    var syncDown=vEl("button",{class:"vault-lock-btn",id:"memoSyncDownBtn",text:M.syncBusy?"☁️ 同步中":"⬇️ 从云端拉取"});
+    syncDown.disabled=!!M.syncBusy;
+    syncDown.addEventListener("click",function(){ memoSyncPull(); });
+    wrap.appendChild(syncDown);
     var bin=vEl("button",{class:"vault-lock-btn",text:M.showDeleted?"📂 返回列表":"🗑 回收站"});
     bin.addEventListener("click",function(){ M.showDeleted=!M.showDeleted; memoRender(); });
     wrap.appendChild(bin);
@@ -3138,17 +3176,67 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }
     for(var i=0;i<list.length;i++) wrap.appendChild(memoBuildCard(list[i]));
   }
+
+  // --- 卡片内联编辑（标题/正文，就地更新不重渲染列表） ---
+  function memoInlineEdit(id,field,value,card){
+    var it=memoFind(id);
+    if(!it) return;
+    var max=(field==="body")?MEMO_LIMITS.body:MEMO_LIMITS.title;
+    value=memoStr(value,max);
+    if(field==="title"){
+      value=value.trim();
+      var titleEl=card&&card.querySelector(".memo-card-title-input");
+      if(titleEl&&titleEl.value!==value) titleEl.value=value;
+    }
+    it[field]=value;
+    it.updatedAt=Date.now();
+    if(card){
+      var stat=card.querySelector("[data-stat]");
+      if(field==="body"&&stat) stat.textContent="共 "+value.length+" 字";
+      var meta=card.querySelector("[data-meta]");
+      if(meta){
+        var parts=[];
+        if(it.folder) parts.push(it.folder);
+        if(it.tags&&it.tags.length) parts.push("#"+it.tags.join(" #"));
+        parts.push(new Date(it.updatedAt||it.createdAt||Date.now()).toLocaleString());
+        meta.textContent=parts.join(" · ");
+      }
+    }
+    if(memoInlineTimer) clearTimeout(memoInlineTimer);
+    memoInlineTimer=setTimeout(function(){ memoInlineTimer=null; memoSave(true); },800);
+  }
+  function memoFlushInline(){
+    if(memoInlineTimer){ clearTimeout(memoInlineTimer); memoInlineTimer=null; memoSave(true); }
+  }
+
   function memoBuildCard(it){
+    var editable=canEdit()&&M.showDeleted===false;
     var card=vEl("div",{class:"memo-card"+(it.pinned?" pinned":"")});
+    card.setAttribute("data-id",it.id);
     var head=vEl("div",{class:"memo-card-head"});
     var info=vEl("div",{class:"memo-card-info"});
-    info.appendChild(vEl("div",{class:"memo-card-title",text:it.title||"(无标题)"}));
+    // 标题：input 内联编辑
+    var titleIn=vEl("input",{
+      class:"memo-card-title-input"+(editable?"":" memo-card-input-readonly"),
+      type:"text",value:it.title||"",
+      placeholder:"(无标题)",autocomplete:"off",
+      maxlength:String(MEMO_LIMITS.title)
+    });
+    if(!editable) titleIn.setAttribute("readonly","");
+    else titleIn.addEventListener("input",function(){
+      memoInlineEdit(it.id,"title",this.value,card);
+    });
+    info.appendChild(titleIn);
+    // meta 行（文件夹/标签/日期），data-meta 用于就地更新
     var parts=[];
     if(it.folder) parts.push(it.folder);
     if(it.tags&&it.tags.length) parts.push("#"+it.tags.join(" #"));
     parts.push(new Date(it.updatedAt||it.createdAt||Date.now()).toLocaleString());
-    info.appendChild(vEl("div",{class:"memo-card-meta",text:parts.join(" · ")}));
+    var meta=vEl("div",{class:"memo-card-meta",text:parts.join(" · ")});
+    meta.setAttribute("data-meta","");
+    info.appendChild(meta);
     head.appendChild(info);
+    // 操作按钮
     var acts=vEl("div",{class:"vault-entry-actions"});
     if(M.showDeleted){
       var rst=vEl("button",{text:"恢复"});
@@ -3162,7 +3250,10 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
       pin.addEventListener("click",function(){ memoTogglePin(it.id); });
       acts.appendChild(pin);
       var ed=vEl("button",{text:"编辑"});
-      ed.addEventListener("click",function(){ M.editingId=it.id; memoRenderForm(); });
+      ed.addEventListener("click",function(){
+        memoFlushInline();
+        M.editingId=it.id; memoRenderForm();
+      });
       acts.appendChild(ed);
       var del=vEl("button",{class:"danger",text:"删除"});
       del.addEventListener("click",function(){ memoDelete(it.id); });
@@ -3170,11 +3261,34 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }
     head.appendChild(acts);
     card.appendChild(head);
-    if(it.body){
-      card.appendChild(vEl("div",{class:"memo-card-body",text:it.body.length>240?it.body.slice(0,240)+"…":it.body}));
-      card.appendChild(vEl("div",{class:"memo-card-stat",text:"共 "+it.body.length+" 字"}));
+    // 正文：textarea 内联编辑（始终显示，支持空内容输入）
+    var bodyIn=vEl("textarea",{
+      class:"memo-card-body-input"+(editable?"":" memo-card-input-readonly"),
+      rows:"2"
+    });
+    bodyIn.value=it.body||"";
+    bodyIn.setAttribute("maxlength",String(MEMO_LIMITS.body));
+    bodyIn.setAttribute("data-body","");
+    if(!editable) bodyIn.setAttribute("readonly","");
+    else{
+      bodyIn.addEventListener("input",function(){
+        memoInlineEdit(it.id,"body",this.value,card);
+        memoAutoGrow(this);
+      });
     }
+    card.appendChild(bodyIn);
+    // 字数统计，data-stat 用于就地更新
+    var stat=vEl("div",{class:"memo-card-stat",text:"共 "+(it.body?it.body.length:0)+" 字"});
+    stat.setAttribute("data-stat","");
+    card.appendChild(stat);
+    // 自适应高度
+    setTimeout(function(){ memoAutoGrow(bodyIn); },0);
     return card;
+  }
+  function memoAutoGrow(ta){
+    if(!ta) return;
+    ta.style.height="auto";
+    ta.style.height=ta.scrollHeight+"px";
   }
   function memoRenderForm(){
     var wrap=$("memoFormWrap"); if(!wrap) return;
