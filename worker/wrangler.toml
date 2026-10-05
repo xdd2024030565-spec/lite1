@@ -4,13 +4,12 @@ compatibility_date = "2024-11-01"
 
 [[kv_namespaces]]
 binding = "VAULT_KV"
-id = "<把这里替换成 wrangler kv namespace create 输出的 id>"
+id = "dadc5158a42140c2a1c210a9ee28ccec"
 
 [vars]
 ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc"
 # SYNC_KEY 建议用 `wrangler secret put SYNC_KEY` 单独设置，不要写进 toml
 
-# 可选：绑定自定义域
-# [[routes]]
-# pattern = "vault-sync.ccwu.cc/*"
-# zone_name = "ccwu.cc"
+# 已配置自定义域路由（通过 Cloudflare Dashboard/API 添加）：
+# vault-sync.yongjiu.ccwu.cc/* -> vault-sync
+# 如需修改，请在 Cloudflare Dashboard → Workers & Pages → vault-sync → Settings → Domains & Routes 中操作
