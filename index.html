@@ -2946,18 +2946,40 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
   }
 
   // --- 备忘录云同步 ---
-  function memoSyncFetch(method,payload){
+  // 同步请求：带超时 + 自动重试（CF 节点偶发 Connection reset，重试一次通常就通）
+  var MEMO_SYNC_TIMEOUT=12000, MEMO_SYNC_RETRY=2;
+  function memoSyncFetchOnce(method,payload){
     var d=memoGetMeta();
     var url=(d.syncUrl||MEMO_SYNC_DEFAULT).trim();
     if(!url) return Promise.reject(new Error("未配置同步地址"));
     var headers={},opts={method:method,headers:headers};
     if(d.syncKey) headers["Authorization"]="Bearer "+d.syncKey;
     if(payload){headers["Content-Type"]="application/json";opts.body=JSON.stringify(payload);}
-    return fetch(url,opts).then(function(r){
+    opts.cache="no-store";
+    var ctrl=null,timer=null;
+    try{ ctrl=new AbortController(); opts.signal=ctrl.signal; }catch(e){ ctrl=null; }
+    var req=fetch(url,opts).then(function(r){
       if(r.status===404) return null;
       if(!r.ok) throw new Error("HTTP "+r.status);
       return r.json().catch(function(){return null;});
     });
+    if(!ctrl) return req;
+    var timeout=new Promise(function(_,rej){
+      timer=setTimeout(function(){ try{ctrl.abort();}catch(e){} rej(new Error("请求超时（"+Math.round(MEMO_SYNC_TIMEOUT/1000)+"s）")); },MEMO_SYNC_TIMEOUT);
+    });
+    return Promise.race([req,timeout]).then(function(v){ clearTimeout(timer); return v; },
+                                         function(e){ clearTimeout(timer); throw e; });
+  }
+  function memoSyncFetch(method,payload){
+    var attempt=0;
+    function run(){
+      attempt++;
+      return memoSyncFetchOnce(method,payload).catch(function(e){
+        if(attempt<=MEMO_SYNC_RETRY){ return new Promise(function(res){ setTimeout(res,400*attempt); }).then(run); }
+        throw e;
+      });
+    }
+    return run();
   }
   function memoMerge(local,remote){
     var map={},out=[],i,it,k,ex;
@@ -2970,6 +2992,18 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }
     for(k in map){ if(map.hasOwnProperty(k)) out.push(map[k]); }
     return out;
+  }
+  // 把网络错误翻译成可操作的提示
+  function memoErrText(e){
+    var m=(e&&e.message)||String(e||"");
+    if(/Failed to fetch|NetworkError|Load failed/i.test(m)){
+      return "网络不通或被拦截（检查 CF 链路 / CORS 白名单是否含本站域名 " + location.origin + "）";
+    }
+    if(/超时/.test(m)) return m+"，请重试";
+    if(/HTTP 401/.test(m)) return "未授权（需在同步设置里填写 SYNC_KEY）";
+    if(/HTTP 40[34]/.test(m)) return "同步路径或 token 不正确";
+    if(/HTTP 5/.test(m)) return "服务端错误（"+m+"），请稍后重试";
+    return m;
   }
   function memoRenderSyncTs(){
     var el=$("memoSyncTs"); if(!el) return;
@@ -3018,7 +3052,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }).catch(function(e){
       M.syncBusy=false;
       memoRenderSyncBar();
-      showToast("同步失败："+((e&&e.message)||e),null,null);
+      showToast("同步失败："+memoErrText(e),null,null);
     });
   }
   function memoSyncPull(){
@@ -3045,7 +3079,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     }).catch(function(e){
       M.syncBusy=false;
       memoRenderSyncBar();
-      showToast("拉取失败："+((e&&e.message)||e),null,null);
+      showToast("拉取失败："+memoErrText(e),null,null);
     });
   }
 

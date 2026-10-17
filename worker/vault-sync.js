@@ -1,4 +1,4 @@
-// Cloudflare Worker · 通用 JSON 同步后端（KV 版）v3
+// Cloudflare Worker · 通用 JSON 同步后端（KV 版）v4
 // 路由：
 //   OPTIONS /vault | /memo | /memo/<token>   -> CORS 预检
 //   GET/PUT /vault        -> 密码库密文信封（Bearer SYNC_KEY 必需）
@@ -6,15 +6,36 @@
 //   GET/PUT /memo/<token> -> 备忘录免密通道（token === env.MEMO_TOKEN，零配置）
 //   GET/PUT /memo/<错误token> -> 404
 // 语义：服务端不解析业务内容，只做「原样存取 + JSON 合法性校验」。
-// CORS：Access-Control-Allow-Origin 取自 env.ALLOW_ORIGIN。
+//
+// CORS（v4 变更）：支持多来源白名单。
+//   ALLOW_ORIGIN 支持逗号分隔多个来源，或单个 "*"。
+//   例：ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io"
+//   命中则回显该 Origin；未命中回第一个来源（浏览器会自行拒绝，属预期行为）。
+//   注意：来源里不要带结尾斜杠；多个来源用英文逗号分隔，不要有空格以外的歧义字符。
+//
 // KV：key "vault" / key "memo"（复用同一 namespace）。
-// 说明：/memo/<token> 为「不可猜路径」的简化通道，适合日常内容；敏感数据请用密码库。
 
 const KEY_BY_PATH = { "/vault": "vault", "/memo": "memo" };
 
+function parseAllowedOrigins(raw) {
+  const s = String(raw || "*").trim();
+  if (s === "*") return ["*"];
+  return s.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+function pickOrigin(requestOrigin, allowed) {
+  if (allowed.indexOf("*") !== -1) return "*";
+  if (!requestOrigin) return allowed[0] || "";
+  // 精确匹配优先（避免 https://x.com.evil.com 之类后缀欺骗）
+  if (allowed.indexOf(requestOrigin) !== -1) return requestOrigin;
+  return allowed[0] || "";
+}
+
 export default {
   async fetch(request, env) {
-    const allowOrigin = env.ALLOW_ORIGIN || "*";
+    const allowed = parseAllowedOrigins(env.ALLOW_ORIGIN);
+    const reqOrigin = request.headers.get("Origin") || "";
+    const allowOrigin = pickOrigin(reqOrigin, allowed);
     const corsHeaders = {
       "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
@@ -88,7 +109,7 @@ export default {
 
 function jsonResp(obj, status, headers) {
   return new Response(JSON.stringify(obj), {
-    status,
+    status: status,
     headers: Object.assign({}, headers, { "Content-Type": "application/json" })
   });
 }

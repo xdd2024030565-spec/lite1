@@ -7,7 +7,10 @@ binding = "VAULT_KV"
 id = "dadc5158a42140c2a1c210a9ee28ccec"
 
 [vars]
-ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc"
+# 多来源白名单（英文逗号分隔，不要结尾斜杠）。
+# 帽子云预览域名形如 https://lite1-xxxxxxxx.maozi.io，若域名会变，
+# 可在此加入；或改用 * 放宽（不推荐，会允许任意站点读写你的备忘录）。
+ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io"
 # SYNC_KEY 建议用 `wrangler secret put SYNC_KEY` 单独设置，不要写进 toml
 
 # 已配置自定义域路由（通过 Cloudflare Dashboard/API 添加）：
