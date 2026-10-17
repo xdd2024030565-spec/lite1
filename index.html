@@ -84,6 +84,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .link-row{display:flex;align-items:flex-start;gap:14px}
 .link-favicon{width:36px;height:36px;border-radius:8px;flex-shrink:0;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:.95rem;font-weight:600;color:var(--fg2);overflow:hidden;position:relative}
 .link-favicon img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.link-favicon.noimg{background:var(--bg2)}
 .link-info{flex:1;min-width:0}
 .link-title{font-size:1.05rem;font-weight:600;word-break:break-word;margin-bottom:2px}
 .link-meta{font-size:.82rem;color:var(--fg2);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -134,11 +135,18 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .folder-card.open{border-color:var(--border)}
 .folder-head{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;-webkit-user-select:none;user-select:none;transition:background .15s var(--ease)}
 .folder-head:hover{background:var(--accent-bg)}
-.folder-stack{position:relative;width:26px;height:25px;flex-shrink:0}
-.folder-stack i{position:absolute;left:0;right:0;height:14px;border-radius:5px;background:var(--bg2);border:1px solid var(--border);display:block}
-.folder-stack i:nth-child(1){top:0;left:6px;right:6px;opacity:.45}
-.folder-stack i:nth-child(2){top:5px;left:3px;right:3px;opacity:.7}
-.folder-stack i:nth-child(3){top:10px;background:var(--accent-bg);border-color:var(--accent)}
+/* 折叠态图标：与 .link-favicon 同尺寸同圆角，仅横向堆叠；网址越多越密 */
+.folder-stack{position:relative;width:36px;height:36px;flex-shrink:0}
+.folder-stack i{position:absolute;top:50%;left:0;width:26px;height:26px;margin-top:-13px;border-radius:calc(var(--radius) * .66);background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--fg2);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.10);transform:translateX(var(--sx,0px));transition:transform .18s var(--ease)}
+.folder-stack i img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.folder-stack i:nth-child(1){z-index:9}.folder-stack i:nth-child(2){z-index:8}.folder-stack i:nth-child(3){z-index:7}.folder-stack i:nth-child(4){z-index:6}.folder-stack i:nth-child(5){z-index:5}.folder-stack i:nth-child(6){z-index:4}
+.folder-stack[data-n="0"] i,.folder-stack[data-n="1"] i{--sx:0px;width:36px;height:36px;margin-top:-18px;border-radius:var(--radius)}
+.folder-stack[data-n="2"] i:nth-child(1){--sx:0px}.folder-stack[data-n="2"] i:nth-child(2){--sx:10px}.folder-stack[data-n="3"] i:nth-child(1){--sx:0px}.folder-stack[data-n="3"] i:nth-child(2){--sx:5px}.folder-stack[data-n="3"] i:nth-child(3){--sx:10px}
+.folder-stack[data-n="4"] i:nth-child(1){--sx:0px}.folder-stack[data-n="4"] i:nth-child(2){--sx:3.5px}.folder-stack[data-n="4"] i:nth-child(3){--sx:7px}.folder-stack[data-n="4"] i:nth-child(4){--sx:10px}
+.folder-stack[data-n="5"] i:nth-child(1){--sx:0px}.folder-stack[data-n="5"] i:nth-child(2){--sx:2.5px}.folder-stack[data-n="5"] i:nth-child(3){--sx:5px}.folder-stack[data-n="5"] i:nth-child(4){--sx:7.5px}.folder-stack[data-n="5"] i:nth-child(5){--sx:10px}
+.folder-stack[data-n="6"] i:nth-child(1){--sx:0px}.folder-stack[data-n="6"] i:nth-child(2){--sx:2px}.folder-stack[data-n="6"] i:nth-child(3){--sx:4px}.folder-stack[data-n="6"] i:nth-child(4){--sx:6px}.folder-stack[data-n="6"] i:nth-child(5){--sx:8px}.folder-stack[data-n="6"] i:nth-child(6){--sx:10px}
+.folder-head:hover .folder-stack i{transform:translateX(calc(var(--sx,0px) + 1.5px))}
+@media(max-width:480px){.folder-head:hover .folder-stack i{transform:translateX(var(--sx,0px))}}
 .folder-name{flex:1;min-width:0;font-size:.98rem;font-weight:600;display:flex;align-items:center;gap:8px}
 .folder-name .fn-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .folder-cat{flex-shrink:0;font-size:.72rem;font-weight:500;color:var(--fg2);background:var(--bg2);border-radius:10px;padding:2px 8px}
@@ -1389,7 +1397,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var cat=S.categories.find(function(c){return c.id===l.categoryId;});
     var cn=cat?cat.name:"未分类"; var dom=getDomain(l.url); var ts=timeAgo(l.added); var lt=getLetter(l.title); var fu=getFavUrl(l.url);
     var h='<li class="link-card"><div class="link-row">';
-    h+='<div class="link-favicon">'+esc(lt)+'<img src="'+fu+'" loading="lazy" onerror="this.remove()"></div>';
+    h+='<div class="link-favicon">'+esc(lt)+'<img src="'+fu+'" loading="lazy" alt="" onerror="this.parentNode.classList.add(\'noimg\');this.remove()"></div>';
     h+='<div class="link-info"><div class="link-title">'+esc(l.title)+'</div><div class="link-meta">';
     h+='<a href="'+esc(l.url)+'" target="_blank" rel="noopener">'+esc(dom)+'</a>';
     h+='<span class="dot">·</span><span>'+esc(cn)+'</span><span class="dot">·</span><span>'+ts+'</span>';
@@ -1426,11 +1434,23 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(now) card.classList.add("open"); else card.classList.remove("open");
     foldOpen[id]=now;
   }
+  // 折叠组图标：取组内网址自己的 favicon，从左到右堆叠；网址越多排得越密
+  var FOLD_STACK_MAX=6;
+  function foldStackHtml(items,f){
+    var chips=items.slice(0,FOLD_STACK_MAX);
+    if(chips.length===0) return '<div class="folder-stack" data-n="0"><i>'+esc(getLetter(f&&f.name))+'</i></div>';
+    var h='<div class="folder-stack" data-n="'+chips.length+'">';
+    for(var i=chips.length-1;i>=0;i--){   // DOM 从后往前：最左的网址压在最上层（它排在最前）
+      var l=chips[i];
+      h+='<i>'+esc(getLetter(l.title||l.url))+'<img src="'+esc(getFavUrl(l.url))+'" loading="lazy" alt="" onerror="this.remove()"></i>';
+    }
+    return h+'</div>';
+  }
   function renderFolder(f,items){
     var open=isFoldOpen(f.id);
     var h='<div class="folder-card'+(open?" open":"")+'" data-fid="'+f.id+'">';
     h+='<div class="folder-head" data-act="foldertoggle" data-id="'+f.id+'">';
-    h+='<div class="folder-stack"><i></i><i></i><i></i></div>';
+    h+=foldStackHtml(items,f);
     h+='<div class="folder-name"><span class="fn-t">'+esc(f.name)+'</span><span class="folder-cat">'+esc(catName(f.categoryId))+'</span></div>';
     h+='<div class="folder-count">'+items.length+'</div>';
     h+='<div class="folder-chev">▶</div>';
