@@ -43,15 +43,6 @@
   ],
   "links": [
     {
-      "id": "mvbs1msss2iiq",
-      "url": "https://chat.deepseek.com/:2",
-      "title": "https://chat.deepseek.com/:2",
-      "categoryId": "default",
-      "note": "",
-      "pinned": false,
-      "added": "2026-10-17T02:28:15.916Z"
-    },
-    {
       "id": "mus3si2r33mks",
       "url": "https://apiranking.com/",
       "title": "APIranking中转查询",
