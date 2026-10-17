@@ -130,37 +130,57 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 .cat-item-actions button{border:none;background:transparent;color:var(--fg2);font-size:.85rem;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit}
 .cat-item-actions button:hover{color:var(--accent);background:var(--accent-bg)}
 .cat-item-actions button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
-/* ====== 折叠组 ====== */
-.folder-card{background:var(--card);border-radius:var(--radius);margin-bottom:10px;border:1px solid transparent;overflow:hidden;transition:border-color .2s var(--ease)}
-.folder-card.open{border-color:var(--border)}
-.folder-head{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;-webkit-user-select:none;user-select:none;transition:background .15s var(--ease)}
+/* ====== 折叠组 ======
+   折叠态 = 一个和普通网址行完全同尺寸的行（只是图标是堆叠的）
+   展开态 = 标题行让位给组内网址列表，顶部留一条极小的标识条用于收回 */
+.folder-card{margin-bottom:10px}
+.folder-head{width:100%;text-align:left;font-family:inherit;background:var(--card);border:none;
+  border-radius:var(--radius);padding:18px;margin:0;cursor:pointer;-webkit-user-select:none;user-select:none;
+  color:var(--fg);font-size:1rem;transition:background .15s var(--ease)}
 .folder-head:hover{background:var(--accent-bg)}
-/* 折叠态图标：与 .link-favicon 同尺寸同圆角，仅横向堆叠；网址越多越密 */
-.folder-stack{position:relative;width:36px;height:36px;flex-shrink:0}
-.folder-stack i{position:absolute;top:50%;left:0;width:26px;height:26px;margin-top:-13px;border-radius:calc(var(--radius) * .66);background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--fg2);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.10);transform:translateX(var(--sx,0px));transition:transform .18s var(--ease)}
+.folder-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* 图标堆叠：图标位固定 36×36（与普通 favicon 同框，不压字、不撑宽行）。
+   第一个网址的图标在最左且位于最上层（完整可见），其后的层依次压在它下面、只露出右侧条带，
+   因此呈现「从左到右」的堆叠；层数越多，条带越薄 => 越密集。超过 3 个用右下角数字角标 */
+.folder-stack{position:relative;width:36px;height:36px;flex-shrink:0;cursor:pointer;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.folder-stack i{position:absolute;top:0;left:0;width:36px;height:36px;border-radius:8px;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-size:.95rem;font-weight:600;color:var(--fg2);
+  overflow:hidden;outline:2px solid var(--card);outline-offset:-1px;
+  transform:translateX(var(--sx,0px));transition:transform .18s var(--ease)}
 .folder-stack i img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.folder-stack i:nth-child(1){z-index:9}.folder-stack i:nth-child(2){z-index:8}.folder-stack i:nth-child(3){z-index:7}.folder-stack i:nth-child(4){z-index:6}.folder-stack i:nth-child(5){z-index:5}.folder-stack i:nth-child(6){z-index:4}
-.folder-stack[data-n="0"] i,.folder-stack[data-n="1"] i{--sx:0px;width:36px;height:36px;margin-top:-18px;border-radius:var(--radius)}
-.folder-stack[data-n="2"] i:nth-child(1){--sx:0px}.folder-stack[data-n="2"] i:nth-child(2){--sx:10px}.folder-stack[data-n="3"] i:nth-child(1){--sx:0px}.folder-stack[data-n="3"] i:nth-child(2){--sx:5px}.folder-stack[data-n="3"] i:nth-child(3){--sx:10px}
-.folder-stack[data-n="4"] i:nth-child(1){--sx:0px}.folder-stack[data-n="4"] i:nth-child(2){--sx:3.5px}.folder-stack[data-n="4"] i:nth-child(3){--sx:7px}.folder-stack[data-n="4"] i:nth-child(4){--sx:10px}
-.folder-stack[data-n="5"] i:nth-child(1){--sx:0px}.folder-stack[data-n="5"] i:nth-child(2){--sx:2.5px}.folder-stack[data-n="5"] i:nth-child(3){--sx:5px}.folder-stack[data-n="5"] i:nth-child(4){--sx:7.5px}.folder-stack[data-n="5"] i:nth-child(5){--sx:10px}
-.folder-stack[data-n="6"] i:nth-child(1){--sx:0px}.folder-stack[data-n="6"] i:nth-child(2){--sx:2px}.folder-stack[data-n="6"] i:nth-child(3){--sx:4px}.folder-stack[data-n="6"] i:nth-child(4){--sx:6px}.folder-stack[data-n="6"] i:nth-child(5){--sx:8px}.folder-stack[data-n="6"] i:nth-child(6){--sx:10px}
-.folder-head:hover .folder-stack i{transform:translateX(calc(var(--sx,0px) + 1.5px))}
-@media(max-width:480px){.folder-head:hover .folder-stack i{transform:translateX(var(--sx,0px))}}
-.folder-name{flex:1;min-width:0;font-size:.98rem;font-weight:600;display:flex;align-items:center;gap:8px}
-.folder-name .fn-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.folder-cat{flex-shrink:0;font-size:.72rem;font-weight:500;color:var(--fg2);background:var(--bg2);border-radius:10px;padding:2px 8px}
-.folder-count{flex-shrink:0;font-size:.78rem;color:var(--fg2)}
-.folder-chev{flex-shrink:0;font-size:.68rem;color:var(--fg2);transition:transform .2s var(--ease)}
+/* 单枚：与普通图标完全一致（无描边、无错位） */
+.folder-stack[data-n="0"] i,.folder-stack[data-n="1"] i{--sx:0px;outline:none}
+/* 第 1 层 z 最高（在最左、完整可见）；之后逐层降低并右移。右移量使右侧条带恰好落在 36px 内 */
+.folder-stack[data-n="2"] i:nth-child(1){--sx:-9px;z-index:3}.folder-stack[data-n="2"] i:nth-child(2){--sx:0px;z-index:2}
+.folder-stack[data-n="3"] i:nth-child(1){--sx:-12px;z-index:4}.folder-stack[data-n="3"] i:nth-child(2){--sx:-6px;z-index:3}.folder-stack[data-n="3"] i:nth-child(3){--sx:0px;z-index:2}
+.folder-stack[data-n="4"] i:nth-child(1),.folder-stack[data-n="5"] i:nth-child(1),.folder-stack[data-n="6"] i:nth-child(1){--sx:-9px;z-index:5}
+.folder-stack[data-n="4"] i:nth-child(2),.folder-stack[data-n="5"] i:nth-child(2),.folder-stack[data-n="6"] i:nth-child(2){--sx:-4.5px;z-index:4}
+.folder-stack[data-n="4"] i:nth-child(3),.folder-stack[data-n="5"] i:nth-child(3),.folder-stack[data-n="6"] i:nth-child(3){--sx:0px;z-index:3}
+.folder-stack[data-n="4"] i:nth-child(n+4),.folder-stack[data-n="5"] i:nth-child(n+4),.folder-stack[data-n="6"] i:nth-child(n+4){display:none}
+.folder-stack .more{position:absolute;right:-5px;bottom:-5px;z-index:9;min-width:16px;height:16px;padding:0 3px;
+  border-radius:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;
+  box-shadow:0 0 0 2px var(--card)}
+@media(hover:hover){.folder-head:hover .folder-stack i{transform:translateX(calc(var(--sx,0px) + 1.5px))}}
+.folder-chev{flex-shrink:0;font-size:.68rem;color:var(--fg2);transition:transform .2s var(--ease);align-self:center}
 .folder-card.open .folder-chev{transform:rotate(90deg)}
-.folder-tools{display:flex;gap:4px;flex-shrink:0}
-.folder-tools button{border:none;background:transparent;color:var(--fg2);font-size:.78rem;padding:4px 8px;border-radius:7px;cursor:pointer;font-family:inherit;transition:all .15s}
-.folder-tools button:hover{color:var(--accent);background:var(--accent-bg)}
-.folder-tools button.danger:hover{color:var(--danger);background:rgba(255,59,48,.1)}
-.folder-body{display:none;padding:0 10px 10px}
-.folder-card.open .folder-body{display:block}
-.folder-body .link-card{margin-bottom:8px}
-.folder-empty{color:var(--fg2);font-size:.85rem;padding:8px 10px}
+/* 展开后的极小标识条：组名 + 数量，点它收回 */
+.fold-bar{display:flex;align-items:center;gap:8px;width:100%;font-family:inherit;font-size:.78rem;color:var(--fg2);
+  background:var(--card);border:none;border-radius:10px;padding:12px 14px;margin-bottom:8px;
+  cursor:pointer;text-align:left;line-height:1.2;min-height:44px;box-sizing:border-box;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  transition:background .15s var(--ease)}
+.fold-bar:hover,.fold-bar:focus-visible{background:var(--accent-bg);color:var(--accent);outline:none}
+.fold-bar:active{transform:scale(.995)}
+.fold-bar .fb-icon{flex-shrink:0;width:28px;height:28px;border-radius:8px;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;transition:transform .15s var(--ease)}
+.fold-bar:hover .fb-icon{transform:scale(1.06)}
+.fold-bar .fb-icon i{width:10px;height:2px;border-radius:1px;background:#fff;display:block}
+.fold-bar .fb-count{margin-left:auto;flex-shrink:0;font-size:.72rem;opacity:.75}
+.fold-bar .fb-tag{flex-shrink:0;font-weight:600;letter-spacing:.04em}
+.fold-bar .fb-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--fg)}
+.fold-bar .fb-chev{flex-shrink:0;margin-left:6px;font-size:.62rem}
+.folder-empty{color:var(--fg2);font-size:.85rem;padding:8px 4px}
 .link-actions button.link-act-fold{font-size:.8rem;padding:6px 8px}
 .link-actions button.link-act-fold.in-fold{color:var(--accent)}
 .add-form.add-form-wrap{flex-wrap:wrap}
@@ -1428,38 +1448,81 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     var hit={}; links.forEach(function(l){if(l.fldId) hit[l.fldId]=1;});
     return fs.filter(function(f){return !!hit[f.id];});
   }
+  // 就地替换整张卡片并做高度过渡：折叠态与展开态是两种结构，不能只切 class
   function toggleFolder(id){
-    var card=document.querySelector('.folder-card[data-fid="'+id+'"]'); if(!card) return;
-    var now=!card.classList.contains("open");
-    if(now) card.classList.add("open"); else card.classList.remove("open");
+    var old=document.querySelector('.folder-card[data-fid="'+id+'"]'); if(!old) return;
+    var f=getFolder(id); if(!f) return;
+    var now=!old.classList.contains("open");
     foldOpen[id]=now;
+    var items=S.links.filter(function(l){return l.fldId===id;});
+    items.sort(function(a,b){return new Date(b.added||0)-new Date(a.added||0);});
+    var wrap=document.createElement("div");
+    wrap.innerHTML=renderFolder(f,items);
+    var next=wrap.firstChild;
+    if(!next){ old.classList.toggle("open",now); return; }
+    var reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(reduce||!old.parentNode){ old.parentNode.replaceChild(next,old); return; }
+    var fromH=old.getBoundingClientRect().height;
+    next.style.overflow="hidden";
+    next.style.transition="none";
+    next.style.height="auto";
+    old.parentNode.insertBefore(next,old);
+    var toH=next.getBoundingClientRect().height;
+    next.style.height=fromH+"px";
+    void next.offsetHeight;                 // 强制回流，确保起点生效
+    next.style.transition="height .22s var(--ease)";
+    next.style.height=toH+"px";
+    old.remove();
+    var done=false;
+    var finish=function(){
+      if(done) return; done=true;
+      next.style.transition=""; next.style.height=""; next.style.overflow="";
+      next.removeEventListener("transitionend",finish);
+    };
+    next.addEventListener("transitionend",finish);
+    setTimeout(finish,320);
   }
   // 折叠组图标：取组内网址自己的 favicon，从左到右堆叠；网址越多排得越密
-  var FOLD_STACK_MAX=6;
+  var FOLD_STACK_MAX=3;
   function foldStackHtml(items,f){
-    var chips=items.slice(0,FOLD_STACK_MAX);
-    if(chips.length===0) return '<div class="folder-stack" data-n="0"><i>'+esc(getLetter(f&&f.name))+'</i></div>';
-    var h='<div class="folder-stack" data-n="'+chips.length+'">';
-    for(var i=chips.length-1;i>=0;i--){   // DOM 从后往前：最左的网址压在最上层（它排在最前）
-      var l=chips[i];
+    if(!items.length) return '<div class="folder-stack" data-n="0"><i>'+esc(getLetter(f&&f.name))+'</i></div>';
+    var total=items.length;
+    var show=items.slice(0,FOLD_STACK_MAX);            // 最多 3 个完整 favicon
+    var h='<div class="folder-stack" data-n="'+show.length+'" title="'+esc(f&&f.name||'')+' · '+total+' 个网址">';
+    for(var i=0;i<show.length;i++){                     // 第 1 个在最前(最左)、层级最高
+      var l=show[i];
       h+='<i>'+esc(getLetter(l.title||l.url))+'<img src="'+esc(getFavUrl(l.url))+'" loading="lazy" alt="" onerror="this.remove()"></i>';
     }
+    if(total>show.length) h+='<b class="more">'+total+'</b>';
     return h+'</div>';
   }
   function renderFolder(f,items){
     var open=isFoldOpen(f.id);
-    var h='<div class="folder-card'+(open?" open":"")+'" data-fid="'+f.id+'">';
-    h+='<div class="folder-head" data-act="foldertoggle" data-id="'+f.id+'">';
+    if(open) return renderFolderOpen(f,items);
+    // 折叠态：与 .link-card 完全同构的一行（同 padding / 图标位 / 标题字号 / meta）
+    var h='<div class="folder-card" data-fid="'+f.id+'">';
+    h+='<div class="folder-head link-row" role="button" tabindex="0" data-act="foldertoggle" data-id="'+f.id+'" aria-expanded="false">';
     h+=foldStackHtml(items,f);
-    h+='<div class="folder-name"><span class="fn-t">'+esc(f.name)+'</span><span class="folder-cat">'+esc(catName(f.categoryId))+'</span></div>';
-    h+='<div class="folder-count">'+items.length+'</div>';
+    h+='<div class="link-info"><div class="link-title">'+esc(f.name)+'</div>'
+      +'<div class="link-meta"><span>'+esc(catName(f.categoryId))+'</span><span class="dot">·</span>'
+      +'<span>'+items.length+' 个网址</span></div></div>';
     h+='<div class="folder-chev">▶</div>';
-    if(canEdit()) h+='<div class="folder-tools"><button data-act="folderename" data-id="'+f.id+'">重命名</button><button class="danger" data-act="folderdel" data-id="'+f.id+'">解散</button></div>';
-    h+='</div>';
-    h+='<div class="folder-body">';
-    if(items.length===0) h+='<div class="folder-empty">这个折叠组还是空的</div>';
-    else { h+='<ul class="link-list">'; items.forEach(function(l){h+=renderCard(l);}); h+='</ul>'; }
     h+='</div></div>';
+    return h;
+  }
+  // 展开态：标题行不再占位，只留一条极小的标识条；下面是普通网址卡片（自带间隔）
+  function renderFolderOpen(f,items){
+    var h='<div class="folder-card open" data-fid="'+f.id+'">';
+    h+='<div class="fold-bar" role="button" tabindex="0" data-act="foldertoggle" data-id="'+f.id+'" aria-expanded="true"'
+      +' title="收起这个折叠组">'
+      +'<span class="fb-icon" aria-hidden="true"><i></i></span>'
+      +'<span class="fb-tag">折叠组</span><span class="fb-name">'+esc(f.name)+'</span>'
+      +'<span class="fb-count">'+items.length+' 个网址</span>'
+      +'<span class="fb-chev">▼</span></div>';
+    h+='<ul class="link-list">';
+    if(items.length===0) h+='<li class="folder-empty">这个折叠组还是空的</li>';
+    else items.forEach(function(l){h+=renderCard(l);});
+    h+='</ul></div>';
     return h;
   }
   function foldOptions(cid,selected,emptyLabel,noNew){
@@ -3412,6 +3475,12 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     if(btn.hasAttribute("data-nav-toggle")){toggleNavExpand(btn.getAttribute("data-nav-toggle"));}
     else if(btn.hasAttribute("data-nav-page")){switchPanel(btn.getAttribute("data-nav-page"));}
     else if(btn.hasAttribute("data-nav-action")){var act=btn.getAttribute("data-nav-action"); if(act==="logout") handleLogout();}
+  });
+  // role="button" 的行需要键盘等价操作（Enter / Space）
+  document.addEventListener("keydown",function(e){
+    if(e.key!=="Enter"&&e.key!==" ") return;
+    var el=e.target.closest('[role="button"][data-act="foldertoggle"]'); if(!el) return;
+    e.preventDefault(); toggleFolder(el.getAttribute("data-id"));
   });
   document.addEventListener("click",function(e){
     var el=e.target.closest("[data-act]"); if(!el) return;
