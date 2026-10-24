@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>dsweb 通道自检</title></head>
+<body style="font-family:monospace;padding:16px;background:#0d1117;color:#e6edf3">
+<h3>DeepSeek 网页版反代 · 端到端自检</h3>
+<pre id="log">运行中…</pre>
+<script>
+const BASE='https://ai.yongjiu.ccwu.cc/dsweb';
+const L=[];
+function log(s){L.push(s);document.getElementById('log').textContent=L.join('\n');}
+(async()=>{
+  try{
+    let r=await fetch(BASE+'/health');
+    log('1. /health → '+r.status+' '+JSON.stringify(await r.json()));
+  }catch(e){log('1. /health 失败: '+e);}
+  try{
+    let r=await fetch(BASE+'/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'deepseek-chat',stream:false,messages:[{role:'user',content:'只回答两个字：成功'}]})});
+    const j=await r.json();
+    log('2. 非流式对话 → HTTP '+r.status+' 内容: '+(j.choices?JSON.stringify(j.choices[0].message.content):JSON.stringify(j).slice(0,300)));
+  }catch(e){log('2. 非流式失败: '+e);}
+  try{
+    let r=await fetch(BASE+'/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'deepseek-chat',stream:true,messages:[{role:'user',content:'从1数到5'}]})});
+    const t=await r.text();
+    let acc='';
+    for(const blk of t.split('\n\n')){
+      const m=blk.match(/^data: (.*)$/m); if(!m||m[1]==='[DONE]')continue;
+      try{const o=JSON.parse(m[1]);const d=o.choices&&o.choices[0]&&o.choices[0].delta;if(d&&d.content)acc+=d.content;}catch(e){}
+    }
+    log('3. 流式对话 → HTTP '+r.status+' 拼出的正文: '+JSON.stringify(acc));
+  }catch(e){log('3. 流式失败: '+e);}
+  log('—— 完毕 ——');
+})();
+</script>
+</body>
+</html>

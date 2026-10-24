@@ -1,0 +1,116 @@
+ol = new Map(); // token -> { id, lastUsed, busy }
+async function acquireSession(token) {
+  const now = Date.now();
+  let s = sessionPool.get(token);
+  if (!s || now - s.lastUsed > 30 * 60 * 1000) {
+    s = { id: await createSession(token), lastUsed: now };
+    sessionPool.set(token, s);
+  }
+  s.lastUsed = now;
+  return s.id;
+}
+function buildPrompt(messages, systemPrompt) {
+  const sys = systemPrompt || '';
+  const parts = [];
+  if (sys) parts.push('[system]\n' + sys);
+  for (const m of messages || []) {
+    const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+    if (!c) continue;
+    if (m.role === 'system') {
+      parts.push('[system]\n' + c);
+    } else if (m.role === 'user') {
+      parts.push(c);
+    } else if (m.role === 'assistant') {
+      parts.push('[assistant 之前的回答]\n' + c);
+    }
+  }
+  return parts.join('\n\n');
+}
+function makeParser() {
+  let current = null; // { id, type, content }
+  return function feed(eventName, data) {
+    if (!data || typeof data !== 'object') return null;
+    if (eventName === 'close') return null;
+    if (eventName === 'ready') {
+      current = null;
+      return null;
+    }
+    if (data.v === undefined && data.p === undefined) return null;
+    if (data.v && typeof data.v === 'object' && data.v.response) {
+      const frags = data.v.response.fragments || [];
+      let out = null;
+      for (const f of frags) {
+        if (typeof f.content !== 'string') continue;
+        current = { id: f.id, type: f.type || 'RESPONSE', content: f.content };
+        out = { content: f.content, type: current.type, append: f.content };
+      }
+      return out;
+    }
+    if (typeof data.p === 'string') {
+      if (/^response\/fragments$/.test(data.p)) {
+        const frag = Array.isArray(data.v) ? data.v[0] : data.v;
+        if (frag && typeof frag === 'object' && typeof frag.content === 'string') {
+          current = { id: frag.id, type: frag.type || 'RESPONSE', content: frag.content };
+          return { content: frag.content, type: current.type, append: frag.content };
+        }
+        return null;
+      }
+      const m = data.p.match(/fragments\/(-?\d+)\/content$/);
+      if (m && typeof data.v === 'string') {
+        if (m[1] === '-1') {
+          current = { id: null, type: 'RESPONSE', content: data.v };
+          return { content: current.content, type: current.type, append: data.v };
+        }
+        if (!current) current = { id: m[1], type: 'RESPONSE', content: '' };
+        current.content += data.v;
+        return { content: current.content, type: current.type, append: data.v };
+      }
+      return null; // 其它 patch（elapsed_secs 等）忽略
+    }
+    if (typeof data.v === 'string') {
+      if (!current) {
+        current = { id: null, type: 'RESPONSE', content: data.v };
+      } else {
+        current.content += data.v;
+      }
+      return { content: current.content, type: current.type, append: data.v };
+    }
+    return null;
+  };
+}
+function nowSec() {
+  return Math.floor(Date.now() / 1000);
+}
+function randomId() {
+  return 'chatcmpl-' + Math.random().toString(36).slice(2, 14);
+}
+function openaiChunk(id, model, delta, finish) {
+  return {
+    id,
+    object: 'chat.completion.chunk',
+    created: nowSec(),
+    model,
+    choices: [{ index: 0, delta: delta || {}, finish_reason: finish || null }],
+  };
+}
+function sseChunk(obj) {
+  return 'data: ' + JSON.stringify(obj) + '\n\n';
+}
+function corsHeaders(env) {
+  const allow = (env && env.ALLOW_ORIGIN) || '*';
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+  };
+}
+function jsonResp(obj, status, env) {
+  return new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+  });
+}
+export default {
+  async fetch(r
