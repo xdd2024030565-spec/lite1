@@ -429,6 +429,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
       <div class="form-row"><label>名称</label><input id="pName" placeholder="例如：商汤日日新"></div>
       <div class="form-row"><label>API 地址</label><input id="pBase" placeholder="https://token.sensenova.cn/v1"><div class="hint">程序会自动拼接 /chat/completions。</div></div>
       <div class="form-row"><label>API Key</label><input id="pKey" type="password" placeholder="sk-..."></div>
+      <div class="form-row" id="pLockTip" style="display:none"></div>
     </div>
     <div class="tab-pane" id="p-model">
       <div class="form-row"><label>模型（逗号分隔）</label><input id="pModels" placeholder="sensenova-6.8-flash-lite, deepseek-v4-flash"></div>
@@ -571,10 +572,22 @@ function esc(s){return String(s==null?'':s).replaceAll('&','&amp;').replaceAll('
 let toastTimer=null;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
 // ===== 默认数据 =====
+// ===== DeepSeek 网页版反代（内置，不可删除）=====
+// 走 Cloudflare Worker 反代 chat.deepseek.com；本模型只做纯对话，不参与工具调用。
+// ⚠ 下方 DS_WEB_TOKEN 为内嵌凭证，本仓库是公开仓库，token 泄露 = 账号被滥用。
+//    换 token 见 README「DeepSeek 网页版反代」一节。
+const DS_WEB_TOKEN='cGeBOiwxOGF/9X1/eB0iGLlXdm74AiQPvYhuyQFjNV4AJkQ/bO9c0GWVYEZqxXB2';
+// 反代地址：指向 Cloudflare Worker（见 worker/deepseek/deepseek-web.js）的 /v1
+const DS_WEB_BASE='https://deepseek-web.yongjiu.ccwu.cc/v1';
 const DEFAULT_PROVIDERS=[
+  {id:'deepseek-web',name:'DeepSeek 网页版',base:DS_WEB_BASE,key:DS_WEB_TOKEN,proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手',locked:true,noTools:true,selfProxied:true,badge:'反代'},
   {id:'sensenova',name:'商汤日日新',base:'https://token.sensenova.cn/v1',key:'',proxy:'',models:['sensenova-6.8-flash-lite','deepseek-v4-flash','deepseek-flash','glm-5.2','kimi-k3'],sys:'你是一个有用的 AI 助手'},
   {id:'deepseek',name:'DeepSeek',base:'https://api.deepseek.com/v1',key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手'},
 ];
+// 内置锁定提供商：不可删除，每次启动强制回填（即使 localStorage 里被改掉）
+const BUILTIN_PROVIDERS={};
+DEFAULT_PROVIDERS.forEach(function(p){if(p.locked)BUILTIN_PROVIDERS[p.id]=JSON.parse(JSON.stringify(p))});
+function isLocked(id){return Object.prototype.hasOwnProperty.call(BUILTIN_PROVIDERS,id)}
 const DEFAULT_BUILTIN=[
   {id:'web_search',name:'网页搜索',desc:'经搜索API搜索网页',enabled:true},
   {id:'fetch_url',name:'网页抓取',desc:'抓取指定URL文本内容',enabled:true},
@@ -602,8 +615,28 @@ const DEFAULT_SKILLS=[
 let providers=load(LS_KEYS.providers,DEFAULT_PROVIDERS);
 // 迁移：旧版商汤域名 api.sensenova.cn -> token.sensenova.cn
 providers.forEach(p=>{if(p.base&&p.base.indexOf('api.sensenova.cn')>=0){p.base=p.base.replace("api.sensenova.cn","token.sensenova.cn");}});
+// 内置锁定提供商：强制置顶回填，保持字段与常量一致（用户仍可改 key/base，但不允许删除）
+(function reconcileBuiltin(){
+  Object.keys(BUILTIN_PROVIDERS).forEach(function(id){
+    var def=BUILTIN_PROVIDERS[id];
+    var idx=providers.findIndex(function(p){return p.id===id});
+    if(idx<0){
+      // 已被删除/从未存在 -> 插到最前面
+      providers.unshift(JSON.parse(JSON.stringify(def)));
+    }else{
+      // 存在 -> 锁定标记强制为真，缺失字段补齐
+      var p=providers[idx];
+      Object.keys(def).forEach(function(k){if(p[k]===undefined)p[k]=def[k]});
+      p.locked=true;
+      if(idx>0){providers.splice(idx,1);providers.unshift(p);}
+    }
+  });
+})();
 save(LS_KEYS.providers,providers);
 let activeProviderId=load(LS_KEYS.active,providers[0]?providers[0].id:null);
+// 若记录的当前提供商已不存在，回落到第一项
+if(!getProviderLoose(activeProviderId))activeProviderId=providers[0]?providers[0].id:null;
+function getProviderLoose(id){return providers.find(function(p){return p.id===id})}
 let sessions=load(LS_KEYS.sessions,[]);
 let activeSessionId=load(LS_KEYS.activeSession,null);
 let mcpServers=load(LS_KEYS.mcp,[]);
@@ -627,7 +660,9 @@ function renderProviders(){
   const el=$('providerList');const ap=activeProvider();
   el.innerHTML=providers.map(p=>{
     const active=p.id===ap.id;
-    return '<div class="provider-item'+(active?' active':'')+'" data-pid="'+p.id+'"><span class="dot"></span><span class="n">'+esc(p.name)+'</span><span style="font-size:11px;color:var(--fg2)">'+(p.key?'✓':'未设Key')+'</span></div>';
+    const lock=p.locked?'<span title="内置模型，不可删除" style="font-size:10px;color:var(--fg-faint)">🔒</span>':'';
+    const badge=p.badge?'<span class="chip" style="font-size:10px;padding:0 4px">'+esc(p.badge)+'</span>':'';
+    return '<div class="provider-item'+(active?' active':'')+'" data-pid="'+p.id+'"><span class="dot"></span><span class="n">'+esc(p.name)+badge+lock+'</span><span style="font-size:11px;color:var(--fg2)">'+(p.key?'✓':'未设Key')+'</span></div>';
   }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:8px">暂无提供商</div>';
   el.querySelectorAll('.provider-item').forEach(it=>it.onclick=()=>{activeProviderId=it.dataset.pid;persist();renderAll();toast('已切换提供商')});
   const ms=$('modelSel');
@@ -669,14 +704,28 @@ function openProviderModal(id){
   $('pProxy').value=p?p.proxy||'':'';
   $('pModels').value=p?(p.models||[]).join(', '):'SenseChat-5, SenseChat-Turbo';
   $('pSys').value=p?p.sys||'你是一个有用的 AI 助手':'你是一个有用的 AI 助手';
-  $('pDelete').style.display=p?'':'none';
+  // 内置锁定提供商：隐藏删除按钮，且模型列表只读不可改
+  $('pDelete').style.display=(p&&!isLocked(p.id))?'':'none';
+  // 反代类提供商会在下方提示不支持工具调用
+  var lockTip=$('pLockTip');
+  if(lockTip){
+    if(p&&isLocked(p.id)){lockTip.style.display='block';lockTip.textContent='🔒 内置模型：不可删除，模型列表已锁定（可修改 API 地址与 Key）';}
+    else{lockTip.style.display='none';}
+  }
   $('providerModal').dataset.pid=p?p.id:'';
   $('providerModal').classList.add('open');
 }
 $('btnAddProvider').onclick=()=>openProviderModal(null);
 $('providerList').onclick=e=>{const it=e.target.closest('.provider-item');if(it)openProviderModal(it.dataset.pid)};
 $('pCancel').onclick=()=>$('providerModal').classList.remove('open');
-$('pDelete').onclick=()=>{const pid=$('providerModal').dataset.pid;providers=providers.filter(p=>p.id!==pid);if(activeProviderId===pid)activeProviderId=providers[0]?providers[0].id:null;persist();$('providerModal').classList.remove('open');renderAll();toast('已删除')};
+$('pDelete').onclick=()=>{
+  const pid=$('providerModal').dataset.pid;
+  // 内置锁定提供商拒绝删除（双保险：按钮已隐藏，这里再拦一次）
+  if(isLocked(pid)){toast('内置模型不可删除');return}
+  providers=providers.filter(p=>p.id!==pid);
+  if(activeProviderId===pid)activeProviderId=providers[0]?providers[0].id:null;
+  persist();$('providerModal').classList.remove('open');renderAll();toast('已删除');
+};
 // ===== 自动拉取模型 / 测试连接 =====
 $('btnFetchModels').onclick=async()=>{
   const base=$('pBase').value.trim().replace(/\/+$/,'');
@@ -720,8 +769,13 @@ $('pSave').onclick=()=>{
   const name=$('pName').value.trim(),base=$('pBase').value.trim(),key=$('pKey').value.trim(),proxy=$('pProxy').value.trim(),models=$('pModels').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),sys=$('pSys').value.trim();
   if(!name||!base){toast('名称和 API 地址必填');return}
   const pid=$('providerModal').dataset.pid;
-  if(pid){const p=getProvider(pid);Object.assign(p,{name,base,key,proxy,models,sys});}
-  else{providers.push({id:uid(),name,base,key,proxy,models,sys});activeProviderId=providers[providers.length-1].id;}
+  if(pid){
+    const p=getProvider(pid);
+    // 锁定提供商的 locked/noTools/badge 不允许被表单覆盖掉
+    const keep={};
+    if(isLocked(pid)){keep.locked=true;keep.noTools=p.noTools;keep.badge=p.badge;}
+    Object.assign(p,{name,base,key,proxy,models,sys},keep);
+  }else{providers.push({id:uid(),name,base,key,proxy,models,sys});activeProviderId=providers[providers.length-1].id;}
   persist();$('providerModal').classList.remove('open');renderAll();toast('已保存');
 };
 
@@ -1808,7 +1862,9 @@ function buildUrl(p, endpoint){
   if(p.proxy){
     return p.proxy.replace(/\/+$/,"") + ep;
   }
-  if(settings.useProxy || needProxyFor(base)){
+  // 自带反代的提供商（DeepSeek 网页版等）：base 本身就是可跨域的 Worker 地址，
+  // 绝不能再套一层内置代理 —— 否则路径会被拼坏、Worker 也收不到请求。
+  if(!p.selfProxied && (settings.useProxy || needProxyFor(base))){
     const pb=(settings.proxyBase||BUILTIN_PROXY).replace(/\/+$/,"");
     const tgt=encodeURIComponent(base);
     return pb + "/v1" + ep + (ep.indexOf("?")>=0?"&":"?") + "target=" + tgt;
@@ -1820,7 +1876,7 @@ function buildHeaders(p){
   const h={"Content-Type":"application/json"};
   if(p.key)h["Authorization"]="Bearer "+p.key;
   const base=(p.base||"").replace(/\/+$/,"");
-  if(!p.proxy && (settings.useProxy||needProxyFor(base))){
+  if(!p.selfProxied && !p.proxy && (settings.useProxy||needProxyFor(base))){
     h["X-Target-Base"]=base;
   }
   return h;
@@ -2000,8 +2056,11 @@ async function runCompletion(){
       if(used>th){await compressContext(s);updateCtxBar();}
     }
     const tools=collectTools();
+    // 反代类提供商（noTools）不支持 function calling：不下发工具定义，
+    // 也不让模型知道自己有工具，否则会把工具 JSON 当正文吐出来
+    const effTools=(p&&p.noTools)?[]:tools;
     // 注入工具清单，让模型知道自己能调用工具
-    const sp=buildSystemPrompt(p&&p.sys,tools);
+    const sp=buildSystemPrompt(p&&p.sys,effTools);
     s.messages=s.messages.filter(m=>!(m.role==="system"&&!m._summary));
     if(sp)s.messages.unshift({role:"system",content:sp});
     const msgs=s.messages.filter(m=>m.role!=="system"||m._summary||m===s.messages[0]);
@@ -2025,7 +2084,7 @@ async function runCompletion(){
         if(reasoningText)existing.reasoning=reasoningText;
         _streamDirty=true;
         renderStreamThrottled();
-          },tools);
+          },effTools);
           break; // 成功，跳出重试
         }catch(err){
           const em=String((err&&err.message)||err||"未知错误");

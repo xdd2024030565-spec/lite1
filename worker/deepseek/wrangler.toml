@@ -1,0 +1,28 @@
+name = "deepseek-web"
+main = "deepseek-web.js"
+compatibility_date = "2024-11-01"
+
+# PoW 求解依赖 WASM（DeepSeekHashV1，与 chat.deepseek.com 前端同源算法）。
+# Workers 的模块规则：把 .wasm 作为 ES 模块导入
+# （代码里是 import wasmModule from './sha3_wasm_bg.wasm'）。
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = true
+
+[vars]
+# 允许跨域的前端来源（英文逗号分隔；* 表示任意站点，不推荐）
+ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io"
+# 深度思考开关：auto（按 model 名判断）/ enabled / disabled
+THINKING = "auto"
+# 联网搜索开关：auto / enabled / disabled
+SEARCH = "auto"
+
+# ===== 用 wrangler secret 设置，不要写进本文件 =====
+# wrangler secret put DEEPSEEK_TOKENS   # 网页版 token，多个用英文逗号分隔
+# wrangler secret put PROXY_KEY         # 可选：本代理的访问口令
+
+# 部署后在 Cloudflare Dashboard 添加自定义域路由：
+#   deepseek-web.yongjiu.ccwu.cc/*  ->  deepseek-web
+# 该域名需与 ai.html 里的 DS_WEB_BASE 一致：
+#   const DS_WEB_BASE = 'https://deepseek-web.yongjiu.ccwu.cc/v1';
