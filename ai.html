@@ -1890,7 +1890,8 @@ function buildHeaders(p){
 async function chatOnce(messages,tools){
   const p=activeProvider();
   if(!p||!p.base)throw new Error("未配置提供商");
-  if(!p.key)throw new Error("未设置 API Key");
+  // selfProxied 的凭证在服务端（如 DeepSeek 网页版的反代 Worker），本地无 key 属正常
+  if(!p.key&&!p.selfProxied)throw new Error("未设置 API Key");
   const model=selectedModel||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
   if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
@@ -1903,7 +1904,8 @@ async function chatOnce(messages,tools){
 async function chatStreamFull(messages,onDelta,tools){
   const p=activeProvider();
   if(!p||!p.base)throw new Error("未配置提供商");
-  if(!p.key)throw new Error("未设置 API Key");
+  // selfProxied 的凭证在服务端（如 DeepSeek 网页版的反代 Worker），本地无 key 属正常
+  if(!p.key&&!p.selfProxied)throw new Error("未设置 API Key");
   const model=selectedModel||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
   if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
