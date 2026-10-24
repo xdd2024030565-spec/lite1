@@ -1,0 +1,573 @@
+--FULLX
+Content-Disposition: form-data; name="metadata"
+Content-Type: application/json
+
+{"main_module":"worker.js","compatibility_date":"2024-11-01"}
+--FULLX
+Content-Disposition: form-data; name="worker.js"; filename="worker.js"
+Content-Type: application/javascript+module
+
+// ====== DeepSeek 网页版反向代理（Cloudflare Worker） ======
+// 把 chat.deepseek.com 的私有接口反代为 OpenAI 兼容接口，供前端 ai.html 直接调用。
+//
+// 核心能力：
+//   1. PoW 自动求解（DeepSeekHashV1，内嵌 sha3_wasm_bg.wasm，与官方前端同源算法）
+//   2. OpenAI 兼容：POST /v1/chat/completions、GET /v1/models
+//   3. SSE 流式转发：把 DeepSeek 的 event/data 流实时转成 OpenAI chunk 流
+//   4. 会话管理：一次对话复用同一个 chat_session，多轮上下文靠 prompt 拼接
+//   5. 多账号池：DEEPSEEK_TOKENS 支持逗号分隔多个 token，轮询 + 失败自动切换
+//
+// 鉴权：本 Worker 自身可用 PROXY_KEY 保护（客户端 Authorization 填 PROXY_KEY，
+//       Wrangler secret 必须改名存放，避免把 DeepSeek token 直接暴露给前端）。
+//
+// 部署：
+//   wrangler secret put DEEPSEEK_TOKENS     # 粘贴 token（多个用英文逗号分隔）
+//   wrangler secret put PROXY_KEY           # 可选，本代理的访问口令
+//   wrangler deploy
+
+// 部署变体：WASM 以 gzip+base64 内嵌，运行时用 DecompressionStream 还原。
+// 与 sha3_wasm_bg.wasm 完全等价（26612 字节 -> gzip 13554 -> base64 18072）。
+const WASM_GZ_B64 = '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';
+
+async function wasmBytes(){
+  const bin = atob(WASM_GZ_B64);
+  const gz = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) gz[i] = bin.charCodeAt(i);
+  const ds = new DecompressionStream('gzip');
+  const out = new Response(new Blob([gz]).stream().pipeThrough(ds));
+  return await out.arrayBuffer();
+}
+const DEEPSEEK_BASE = 'https://chat.deepseek.com';
+const DEFAULT_MODEL = 'deepseek-chat';
+
+// 浏览器指纹头：与官方前端保持一致，降低风控概率
+const BROWSER_HEADERS = {
+  'Accept': '*/*',
+  'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Origin': DEEPSEEK_BASE,
+  'Referer': DEEPSEEK_BASE + '/',
+  'x-client-version': '2.3.0',
+  'x-client-platform': 'web',
+  'x-client-locale': 'zh_CN',
+  'x-client-timezone-offset': '28800',
+  'x-client-bundle-id': 'com.deepseek.chat',
+};
+
+// ===== PoW 求解器（WASM 实例按 isolate 复用）=====
+let wasmPromise = null;
+function getWasm() {
+  if (!wasmPromise) {
+    wasmPromise = wasmBytes().then(function(bytes){ return WebAssembly.instantiate(bytes, {}); })
+      .then((r) => (r.instance || r).exports)
+      .catch((e) => {
+        wasmPromise = null; // 允许下次重试
+        throw e;
+      });
+  }
+  return wasmPromise;
+}
+
+function encodeInto(exports, str) {
+  const bytes = new TextEncoder().encode(str);
+  const ptr = exports.__wbindgen_export_0(bytes.length, 1);
+  new Uint8Array(exports.memory.buffer).set(bytes, ptr);
+  return [ptr, bytes.length];
+}
+
+// 解 PoW：输入 challenge 对象，返回可直接放进 X-DS-PoW-Response 的 base64 串
+async function solvePow(challenge) {
+  const e = await getWasm();
+  const stack = e.__wbindgen_add_to_stack_pointer(-16);
+  const [chalPtr, chalLen] = encodeInto(e, challenge.challenge);
+  const [prePtr, preLen] = encodeInto(
+    e,
+    challenge.salt + '_' + challenge.expire_at + '_'
+  );
+  try {
+    e.wasm_solve(stack, chalPtr, chalLen, prePtr, preLen, challenge.difficulty);
+    const view = new DataView(e.memory.buffer);
+    const ok = view.getInt32(stack, true);
+    if (!ok) throw new Error('PoW 求解失败（WASM 未找到解）');
+    const nonce = view.getFloat64(stack + 8, true);
+    const payload = JSON.stringify({
+      algorithm: 'DeepSeekHashV1',
+      challenge: challenge.challenge,
+      salt: challenge.salt,
+      answer: Math.floor(nonce),
+      signature: challenge.signature,
+      target_path: challenge.target_path,
+    });
+    return btoa(payload);
+  } finally {
+    e.__wbindgen_add_to_stack_pointer(16);
+  }
+}
+
+// ===== 上游调用 =====
+function authHeaders(token, extra) {
+  return {
+    ...BROWSER_HEADERS,
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + token,
+    ...(extra || {}),
+  };
+}
+
+async function getPowHeader(token, targetPath = '/api/v0/chat/completion') {
+  const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat/create_pow_challenge', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ target_path: targetPath }),
+  });
+  const text = await r.text();
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch (e) {
+    throw new Error('challenge 响应非 JSON: HTTP ' + r.status + ' ' + text.slice(0, 200));
+  }
+  if (j.code !== 0) {
+    throw new Error('challenge 失败: ' + JSON.stringify(j).slice(0, 300));
+  }
+  return solvePow(j.data.biz_data.challenge);
+}
+
+async function createSession(token) {
+  const pow = await getPowHeader(token);
+  const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/create', {
+    method: 'POST',
+    headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+    body: JSON.stringify({ target_path: '/api/v0/chat/completion' }),
+  });
+  const j = await r.json();
+  if (j.code !== 0) throw new Error('建会话失败: ' + JSON.stringify(j).slice(0, 300));
+  const biz = j.data.biz_data;
+  return biz.id || (biz.chat_session && biz.chat_session.id);
+}
+
+// ===== 账号池 =====
+function loadTokens(env) {
+  const raw = (env && env.DEEPSEEK_TOKENS) || '';
+  return raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// 每个 token 一个会话池，同一会话复用可保证多轮上下文
+const sessionPool = new Map(); // token -> { id, lastUsed, busy }
+
+async function acquireSession(token) {
+  const now = Date.now();
+  let s = sessionPool.get(token);
+  // 会话 30 分钟过期（上游 ttl_seconds 为 259200，这里保守取 30 分钟）
+  if (!s || now - s.lastUsed > 30 * 60 * 1000) {
+    s = { id: await createSession(token), lastUsed: now };
+    sessionPool.set(token, s);
+  }
+  s.lastUsed = now;
+  return s.id;
+}
+
+// ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
+function buildPrompt(messages, systemPrompt) {
+  const sys = systemPrompt || '';
+  const parts = [];
+  if (sys) parts.push('[system]\n' + sys);
+  for (const m of messages || []) {
+    const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+    if (!c) continue;
+    if (m.role === 'system') {
+      parts.push('[system]\n' + c);
+    } else if (m.role === 'user') {
+      parts.push(c);
+    } else if (m.role === 'assistant') {
+      // 用标记区分历史回答，避免被当成新的用户输入
+      parts.push('[assistant 之前的回答]\n' + c);
+    }
+  }
+  // 多轮时把历史压成一段，末尾是当前问题
+  return parts.join('\n\n');
+}
+
+// ===== 上游 SSE 解析 =====
+// DeepSeek 事件流的正文有三种形态（已用真实流量核对）：
+//   1. 快照：{"v":{"response":{"fragments":[{"id":2,"type":"THINK","content":"We"}]}}}
+//      —— 每个新 fragment 开始时发一次，type 为 THINK（思考）或 RESPONSE（正文）
+//   2. 补丁：{"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
+//      —— `-1` 表示「追加一个新 fragment」，它开启下一段；"0"/"1" 表示续写已有段
+//   3. 碎片：{"v":" answer"}  —— 追加到当前段
+// 注意：思考模式下会先来 THINK 段，再来 RESPONSE 段；若始终复用同一个 current，
+// 正文会被混进思考里、RESPONSE 为空（曾实测到 content="" 的 bug）。
+function makeParser() {
+  let current = null; // { id, type, content }
+
+  return function feed(eventName, data) {
+    if (!data || typeof data !== 'object') return null;
+    if (eventName === 'close') return null;
+    // 新消息开始：重置分段
+    if (eventName === 'ready') {
+      current = null;
+      return null;
+    }
+    // 协议层的其它事件（update_session 等）跳过
+    if (data.v === undefined && data.p === undefined) return null;
+
+    // --- 形态 1：快照（含 fragments 数组）---
+    if (data.v && typeof data.v === 'object' && data.v.response) {
+      const frags = data.v.response.fragments || [];
+      let out = null;
+      for (const f of frags) {
+        if (typeof f.content !== 'string') continue;
+        current = { id: f.id, type: f.type || 'RESPONSE', content: f.content };
+        out = { content: f.content, type: current.type, append: f.content };
+      }
+      return out;
+    }
+
+    // --- 形态 2：JSON Patch ---
+    if (typeof data.p === 'string') {
+      // 2a. 追加整个 fragment 数组：{"p":"response/fragments","o":"APPEND","v":[{id,type,content}]}
+      //     思考模式下 THINK 段结束后，正文段就是这样出现的。务必先于下面判断。
+      if (/^response\/fragments$/.test(data.p)) {
+        const frag = Array.isArray(data.v) ? data.v[0] : data.v;
+        if (frag && typeof frag === 'object' && typeof frag.content === 'string') {
+          current = { id: frag.id, type: frag.type || 'RESPONSE', content: frag.content };
+          return { content: frag.content, type: current.type, append: frag.content };
+        }
+        return null;
+      }
+      // 2b. 段内文本补丁：{"p":"response/fragments/-1/content","v":" need"}
+      const m = data.p.match(/fragments\/(-?\d+)\/content$/);
+      if (m && typeof data.v === 'string') {
+        if (m[1] === '-1') {
+          current = { id: null, type: 'RESPONSE', content: data.v };
+          return { content: current.content, type: current.type, append: data.v };
+        }
+        if (!current) current = { id: m[1], type: 'RESPONSE', content: '' };
+        current.content += data.v;
+        return { content: current.content, type: current.type, append: data.v };
+      }
+      return null; // 其它 patch（elapsed_secs 等）忽略
+    }
+
+    // --- 形态 3：裸碎片，追加到当前段 ---
+    if (typeof data.v === 'string') {
+      if (!current) {
+        current = { id: null, type: 'RESPONSE', content: data.v };
+      } else {
+        current.content += data.v;
+      }
+      return { content: current.content, type: current.type, append: data.v };
+    }
+
+    return null;
+  };
+}
+
+// ===== OpenAI 响应组装 =====
+function nowSec() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function randomId() {
+  return 'chatcmpl-' + Math.random().toString(36).slice(2, 14);
+}
+
+function openaiChunk(id, model, delta, finish) {
+  return {
+    id,
+    object: 'chat.completion.chunk',
+    created: nowSec(),
+    model,
+    choices: [{ index: 0, delta: delta || {}, finish_reason: finish || null }],
+  };
+}
+
+function sseChunk(obj) {
+  return 'data: ' + JSON.stringify(obj) + '\n\n';
+}
+
+// ===== CORS =====
+function corsHeaders(env) {
+  const allow = (env && env.ALLOW_ORIGIN) || '*';
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Access-Control-Max-Age': '86400',
+    // 允许来源随请求头变化，必须声明 Vary，避免 CDN 缓存串站
+    Vary: 'Origin',
+  };
+}
+
+function jsonResp(obj, status, env) {
+  return new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+  });
+}
+
+// ===== 主处理 =====
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, '');
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders(env) });
+    }
+
+    // 健康检查
+    if (path === '/health' || path === '') {
+      const tokens = loadTokens(env);
+      return jsonResp({ status: 'ok', tokens: tokens.length, model: DEFAULT_MODEL }, 200, env);
+    }
+
+    // 访问口令校验（设置了 PROXY_KEY 才启用）
+    const auth = request.headers.get('Authorization') || '';
+    const clientKey = auth.replace(/^Bearer\s+/i, '').trim();
+    if (env && env.PROXY_KEY && clientKey !== env.PROXY_KEY) {
+      return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env);
+    }
+
+    const tokens = loadTokens(env);
+    if (!tokens.length) {
+      return jsonResp(
+        { error: { message: '未配置 DEEPSEEK_TOKENS，请先 wrangler secret put DEEPSEEK_TOKENS', type: 'config' } },
+        503,
+        env
+      );
+    }
+
+    // 模型列表
+    if (path === '/v1/models' || path === '/models') {
+      return jsonResp(
+        {
+          object: 'list',
+          data: [
+            { id: DEFAULT_MODEL, object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
+            { id: 'deepseek-reasoner', object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
+          ],
+        },
+        200,
+        env
+      );
+    }
+
+    // 对话
+    if (path === '/v1/chat/completions' || path === '/chat/completions') {
+      return handleChat(request, env, tokens);
+    }
+
+    return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env);
+  },
+};
+
+async function handleChat(request, env, tokens) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResp({ error: { message: '请求体不是合法 JSON', type: 'invalid_request' } }, 400, env);
+  }
+
+  const messages = body.messages || [];
+  if (!messages.length) {
+    return jsonResp({ error: { message: 'messages 不能为空', type: 'invalid_request' } }, 400, env);
+  }
+
+  const model = body.model || DEFAULT_MODEL;
+  const stream = !!body.stream;
+  // 模型名带 reasoner 或显式 thinking_mode 时开启深度思考
+  const thinking =
+    body.thinking_mode === true ||
+    /reasoner/i.test(model) ||
+    (env && env.THINKING === 'enabled');
+  const search = body.search_enabled === true || (env && env.SEARCH === 'enabled');
+
+  const prompt = buildPrompt(messages, body.system);
+  let lastErr = null;
+
+  // 账号池轮询：任意一个 token 成功即可
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    try {
+      const sid = await acquireSession(token);
+      const pow = await getPowHeader(token);
+      const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
+        method: 'POST',
+        headers: authHeaders(token, {
+          'X-DS-PoW-Response': pow,
+          ...(stream ? { Accept: 'text/event-stream' } : {}),
+        }),
+        body: JSON.stringify({
+          chat_session_id: sid,
+          parent_message_id: null,
+          model_type: 'default',
+          prompt,
+          ref_file_ids: [],
+          thinking_enabled: thinking,
+          search_enabled: search,
+          preempt: false,
+          stream: true, // 上游统一用流式，非流式也在本地聚合
+        }),
+      });
+
+      if (!upstream.ok) {
+        const t = await upstream.text();
+        lastErr = new Error('上游 HTTP ' + upstream.status + ': ' + t.slice(0, 200));
+        continue; // 换下一个账号
+      }
+
+      if (stream) return streamResponse(upstream, model, env, thinking);
+      return await aggregateResponse(upstream, model, env, thinking);
+    } catch (e) {
+      lastErr = e;
+      // 会话可能失效，清掉让它重建
+      sessionPool.delete(token);
+    }
+  }
+
+  return jsonResp(
+    {
+      error: {
+        message: '所有账号均失败: ' + (lastErr ? lastErr.message : '未知错误'),
+        type: 'upstream_error',
+      },
+    },
+    502,
+    env
+  );
+}
+
+// 非流式：把上游 SSE 聚合成一次性响应
+async function aggregateResponse(upstream, model, env, thinking) {
+  const text = await upstream.text();
+  const feed = makeParser();
+  let content = '';
+  let reasoning = '';
+
+  for (const block of text.split('\n\n')) {
+    let eventName = '';
+    let dataStr = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+      else if (line.startsWith('data: ')) dataStr += line.slice(6);
+    }
+    if (!dataStr) continue;
+    let data;
+    try {
+      data = JSON.parse(dataStr);
+    } catch (e) {
+      continue;
+    }
+    const delta = feed(eventName, data);
+    if (delta) {
+      if (delta.type === 'THINK') reasoning = delta.content;
+      else content = delta.content;
+    }
+  }
+
+  const message = { role: 'assistant', content };
+  if (reasoning) message.reasoning_content = reasoning;
+
+  return jsonResp(
+    {
+      id: randomId(),
+      object: 'chat.completion',
+      created: nowSec(),
+      model,
+      choices: [{ index: 0, message, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    },
+    200,
+    env
+  );
+}
+
+// 流式：逐块转发 OpenAI chunk
+function streamResponse(upstream, model, env, thinking) {
+  const id = randomId();
+  const encoder = new TextEncoder();
+  const feed = makeParser();
+  let sentContent = '';
+  let sentReasoning = '';
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const push = (obj) => controller.enqueue(encoder.encode(sseChunk(obj)));
+      push(openaiChunk(id, model, { role: 'assistant', content: '' }));
+
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const blocks = buf.split('\n\n');
+          buf = blocks.pop() || '';
+          for (const block of blocks) {
+            let eventName = '';
+            let dataStr = '';
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+              else if (line.startsWith('data: ')) dataStr += line.slice(6);
+            }
+            if (!dataStr) continue;
+            let data;
+            try {
+              data = JSON.parse(dataStr);
+            } catch (e) {
+              continue;
+            }
+            const d = feed(eventName, data);
+            if (!d) continue;
+            // 优先用解析器给出的增量；退化时按累积长度求差
+            const inc =
+              d.append !== undefined
+                ? d.append
+                : d.content.slice((d.type === 'THINK' ? sentReasoning : sentContent).length);
+            if (!inc) continue;
+            if (d.type === 'THINK') {
+              sentReasoning = d.content;
+              push(openaiChunk(id, model, { reasoning_content: inc }));
+            } else {
+              sentContent = d.content;
+              push(openaiChunk(id, model, { content: inc }));
+            }
+          }
+        }
+      } catch (e) {
+        // 上游中断：补一条错误事件，前端可感知
+        push({ error: { message: '上游流中断: ' + (e && e.message ? e.message : e) } });
+      } finally {
+        try {
+          push(openaiChunk(id, model, {}, 'stop'));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        } catch (e) {}
+        try {
+          controller.close();
+        } catch (e) {}
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      ...corsHeaders(env),
+    },
+  });
+}
+
+--FULLX--

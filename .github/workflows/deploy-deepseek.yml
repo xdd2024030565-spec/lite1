@@ -1,0 +1,54 @@
+name: Deploy DeepSeek Web Worker
+
+# 用 GitHub runner 的干净网络部署 Worker（本机到 Cloudflare 的 API 通道时通时不通，
+# runner 侧稳定）。复用已有 secrets：
+#   CF_API_TOKEN —— 需 Workers Scripts:Edit 权限
+#   CF_ACCOUNT_ID —— Cloudflare Account ID
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/deepseek/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check secrets
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then echo "::error::CF_API_TOKEN 缺失"; exit 1; fi
+          if [ -z "$CF_ACCOUNT_ID" ]; then echo "::warning::CF_ACCOUNT_ID 缺失，尝试用已知值"; fi
+          echo "token 长度: ${#CF_API_TOKEN}"
+
+      - name: Install wrangler
+        run: npm i -g wrangler@3
+
+      - name: Deploy worker
+        working-directory: worker/deepseek
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || 'b9865b22dc4d64174713371c293e700f' }}
+        run: |
+          wrangler deploy --name deepseek-web 2>&1 | tee /tmp/deploy.log
+          # 不把 secret 打在日志里
+
+      - name: Set secret
+        working-directory: worker/deepseek
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || 'b9865b22dc4d64174713371c293e700f' }}
+          DS_TOKEN: ${{ secrets.DEEPSEEK_TOKEN }}
+        run: |
+          if [ -z "$DS_TOKEN" ]; then echo "::warning::DEEPSEEK_TOKEN 未配置，跳过"; exit 0; fi
+          echo "$DS_TOKEN" | wrangler secret put DEEPSEEK_TOKENS --name deepseek-web
