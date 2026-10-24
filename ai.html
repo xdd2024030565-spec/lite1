@@ -578,7 +578,7 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show')
 // ⚠ token 不在这里 —— 它在 Worker 的 DEEPSEEK_TOKENS secret 里。
 //   Worker 只认 secret，前端带的 Authorization 头它根本不看（除非配了 PROXY_KEY）。
 //   所以换 token 请改 Worker，改本文件无效。详见 worker/deepseek/README.md。
-const DS_WEB_BASE='https://deepseek-web.yongjiu.ccwu.cc/v1';
+const DS_WEB_BASE='https://ai.yongjiu.ccwu.cc/dsweb/v1';
 const DEFAULT_PROVIDERS=[
   // key 留空：token 由 Worker 侧的 secret 提供，这里不需要也不应该填
   {id:'deepseek-web',name:'DeepSeek 网页版',base:DS_WEB_BASE,key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手',locked:true,noTools:true,selfProxied:true,badge:'反代'},

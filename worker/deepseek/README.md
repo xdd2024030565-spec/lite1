@@ -57,13 +57,13 @@ npx wrangler deploy
 部署后在 Cloudflare Dashboard 给这个 Worker 加自定义域路由：
 
 ```
-deepseek-web.yongjiu.ccwu.cc/*  ->  deepseek-web
+ai.yongjiu.ccwu.cc/dsweb*  ->  deepseek-web（路径路由，复用已有子域，无需新 DNS）
 ```
 
 该域名必须和 `ai.html` 里的常量一致：
 
 ```js
-const DS_WEB_BASE = 'https://deepseek-web.yongjiu.ccwu.cc/v1';
+const DS_WEB_BASE = 'https://ai.yongjiu.ccwu.cc/dsweb/v1';
 ```
 
 ### 拿网页版 token
@@ -105,7 +105,7 @@ secret 是整串覆盖，不需要先删除。多个 token 用英文逗号分隔
 
 ```bash
 # 1) Worker 是否部署好、secret 有没有配上（只看条数，不验证 token 有效性）
-curl https://deepseek-web.yongjiu.ccwu.cc/health
+curl https://ai.yongjiu.ccwu.cc/dsweb/health
 # {"status":"ok","tokens":1,"model":"deepseek-chat"}   ← tokens 为 0 说明 secret 没配
 
 # 2) token 本身是否还有效（直连 DeepSeek，不经过 Worker）
