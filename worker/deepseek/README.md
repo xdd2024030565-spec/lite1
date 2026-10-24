@@ -75,10 +75,45 @@ const DS_WEB_BASE = 'https://deepseek-web.yongjiu.ccwu.cc/v1';
 JSON.parse(localStorage.getItem("userToken")).value
 ```
 
-3. 输出里 **最后一个 `::` 之前的部分**才是 token 本体。复制时容易带出 `::47` 之类的尾巴，
-   那是复制噪声，不是 token 的一部分。
+3. 输出形如 `xxxxxxxx...xxxx::47`。**只有 `::` 之前的部分是 token 本体**，
+   `::47` 是复制时带出的噪声，不是 token 的一部分。
 
-> token 有效期约 24 小时，过期后需要重新获取。建议多准备几个塞进 `DEEPSEEK_TOKENS`。
+## 换 token 只改这一个地方
+
+**改 `ai.html` 没有任何用。** Worker 只读自己的 `DEEPSEEK_TOKENS` secret，
+前端发来的 `Authorization` 头它不看（除非你另外配了 `PROXY_KEY` 做访问口令校验）。
+`ai.html` 里那个提供商的 `key` 字段保持为空是正确的。
+
+```bash
+cd worker/deepseek
+npx wrangler secret put DEEPSEEK_TOKENS   # 粘贴新 token，回车
+npx wrangler deploy
+```
+
+secret 是整串覆盖，不需要先删除。多个 token 用英文逗号分隔，失效一个会自动换下一个。
+
+### token 会过期吗
+
+**token 本身不含有效期**（解码后是 48 字节随机数据，没有时间戳）。
+它失效的可能性有三种，都发生在 DeepSeek 服务端：
+
+1. 你在网页版**退出登录** —— 立即失效
+2. 你在网页版**改密码** —— 旧会话通常失效
+3. 官方**主动吊销**长期不活跃的会话
+
+没有可预测的固定时长，所以不承诺「永久有效」。判断当前 token 是否还活着：
+
+```bash
+# 1) Worker 是否部署好、secret 有没有配上（只看条数，不验证 token 有效性）
+curl https://deepseek-web.yongjiu.ccwu.cc/health
+# {"status":"ok","tokens":1,"model":"deepseek-chat"}   ← tokens 为 0 说明 secret 没配
+
+# 2) token 本身是否还有效（直连 DeepSeek，不经过 Worker）
+curl -H "Authorization: Bearer <TOKEN>" https://chat.deepseek.com/api/v0/users/current
+# 返回 code:0 + 账号信息 = 有效；返回 401/403 = 已失效
+```
+
+失效了就回到上面「换 token 只改这一个地方」重新设置。
 
 ## 配置项（`wrangler.toml` 的 `[vars]`）
 

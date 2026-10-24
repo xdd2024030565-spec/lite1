@@ -574,13 +574,14 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show')
 // ===== 默认数据 =====
 // ===== DeepSeek 网页版反代（内置，不可删除）=====
 // 走 Cloudflare Worker 反代 chat.deepseek.com；本模型只做纯对话，不参与工具调用。
-// ⚠ 下方 DS_WEB_TOKEN 为内嵌凭证，本仓库是公开仓库，token 泄露 = 账号被滥用。
-//    换 token 见 README「DeepSeek 网页版反代」一节。
-const DS_WEB_TOKEN='cGeBOiwxOGF/9X1/eB0iGLlXdm74AiQPvYhuyQFjNV4AJkQ/bO9c0GWVYEZqxXB2';
-// 反代地址：指向 Cloudflare Worker（见 worker/deepseek/deepseek-web.js）的 /v1
+//
+// ⚠ token 不在这里 —— 它在 Worker 的 DEEPSEEK_TOKENS secret 里。
+//   Worker 只认 secret，前端带的 Authorization 头它根本不看（除非配了 PROXY_KEY）。
+//   所以换 token 请改 Worker，改本文件无效。详见 worker/deepseek/README.md。
 const DS_WEB_BASE='https://deepseek-web.yongjiu.ccwu.cc/v1';
 const DEFAULT_PROVIDERS=[
-  {id:'deepseek-web',name:'DeepSeek 网页版',base:DS_WEB_BASE,key:DS_WEB_TOKEN,proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手',locked:true,noTools:true,selfProxied:true,badge:'反代'},
+  // key 留空：token 由 Worker 侧的 secret 提供，这里不需要也不应该填
+  {id:'deepseek-web',name:'DeepSeek 网页版',base:DS_WEB_BASE,key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手',locked:true,noTools:true,selfProxied:true,badge:'反代'},
   {id:'sensenova',name:'商汤日日新',base:'https://token.sensenova.cn/v1',key:'',proxy:'',models:['sensenova-6.8-flash-lite','deepseek-v4-flash','deepseek-flash','glm-5.2','kimi-k3'],sys:'你是一个有用的 AI 助手'},
   {id:'deepseek',name:'DeepSeek',base:'https://api.deepseek.com/v1',key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手'},
 ];
@@ -615,7 +616,7 @@ const DEFAULT_SKILLS=[
 let providers=load(LS_KEYS.providers,DEFAULT_PROVIDERS);
 // 迁移：旧版商汤域名 api.sensenova.cn -> token.sensenova.cn
 providers.forEach(p=>{if(p.base&&p.base.indexOf('api.sensenova.cn')>=0){p.base=p.base.replace("api.sensenova.cn","token.sensenova.cn");}});
-// 内置锁定提供商：强制置顶回填，保持字段与常量一致（用户仍可改 key/base，但不允许删除）
+// 内置锁定提供商：强制置顶回填，保持字段与常量一致（用户仍可改 base，但不允许删除）
 (function reconcileBuiltin(){
   Object.keys(BUILTIN_PROVIDERS).forEach(function(id){
     var def=BUILTIN_PROVIDERS[id];
@@ -628,6 +629,9 @@ providers.forEach(p=>{if(p.base&&p.base.indexOf('api.sensenova.cn')>=0){p.base=p
       var p=providers[idx];
       Object.keys(def).forEach(function(k){if(p[k]===undefined)p[k]=def[k]});
       p.locked=true;
+      // 自带反代的提供商，凭证在 Worker 侧：清掉浏览器里可能残留的旧 key，
+      // 否则界面上会显示「已设 Key」误导用户以为前端 token 在生效
+      if(def.selfProxied)p.key='';
       if(idx>0){providers.splice(idx,1);providers.unshift(p);}
     }
   });

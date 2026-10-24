@@ -30,7 +30,8 @@
 - 反代代码：`worker/deepseek/deepseek-web.js`（含 PoW WASM 求解）
 - 部署说明：`worker/deepseek/README.md`
 - 不支持的：**function calling**（网页版没有工具能力），前端已标记 `noTools`
-- token 有效期约 24 小时，过期需重新获取并更新 `DS_WEB_TOKEN`（或在 ai.html 里直接改）
+- **token 在 Worker 的 secret 里，不在前端**。换 token 只改 `DEEPSEEK_TOKENS`，改 `ai.html` 无效
+- token 本身无有效期，只要不在网页版退出登录 / 改密码 / 被官方吊销就一直可用
 
 ```bash
 cd worker/deepseek
