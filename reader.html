@@ -43,6 +43,36 @@ body.theme-dark .pgbar .pinfo{color:#aaaaaa}
 .toclist a{display:block;padding:8px 0;border-bottom:1px solid #eeeeee;color:#0055cc;word-break:break-all}
 body.theme-dark .toclist a{border-color:#2e2e2e;color:#7db2ff}
 .mini{font-size:.85em;color:#888888}
+/* ===== 悬浮栏（阅读视图 · 点击上下弹出 / 点击再收起） ===== */
+.ovly-bar{position:fixed;left:0;right:0;z-index:99;padding:8px 56px 8px 12px;background:rgba(250,250,250,0.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,0.12);transition:transform .3s cubic-bezier(.4,0,.2,1);will-change:transform;display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;gap:6px;}
+.ovly-bar.top-bar{top:0;transform:translateY(-130%);border-bottom:1px solid #dddddd;}
+.ovly-bar.bot-bar{bottom:0;transform:translateY(130%);border-top:1px solid #dddddd;}
+.ovly-bar.open{transform:translateY(0);}
+body.theme-dark .ovly-bar{background:rgba(20,20,20,0.97);border-color:#333333;}
+body.theme-dark .ovly-bar.top-bar{box-shadow:0 2px 12px rgba(0,0,0,0.4);}
+body.theme-dark .ovly-bar.bot-bar{box-shadow:0 -2px 12px rgba(0,0,0,0.4);}
+.ovly-toggle{position:fixed;right:12px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,0.22);color:#ffffff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;font-size:15px;line-height:1;user-select:none;-webkit-user-select:none;border:none;outline:none;transition:background .2s;touch-action:manipulation;}
+.ovly-toggle.top-toggle{top:10px;}
+.ovly-toggle.bot-toggle{bottom:10px;}
+.ovly-toggle:hover{background:rgba(0,0,0,0.4);}
+.ovly-toggle:active{background:rgba(0,0,0,0.55);}
+.ovly-toggle.is-open{background:rgba(0,0,0,0.5);}
+body.theme-dark .ovly-toggle{background:rgba(255,255,255,0.15);color:#e6e6e6;}
+body.theme-dark .ovly-toggle:hover{background:rgba(255,255,255,0.3);}
+body.theme-dark .ovly-toggle:active{background:rgba(255,255,255,0.45);}
+body.theme-dark .ovly-toggle.is-open{background:rgba(255,255,255,0.35);}
+/* 目录：独立悬浮面板（不占正文流，点目录按钮弹出，点关闭收回） */
+#tocPanel{position:fixed;top:0;left:0;right:0;bottom:0;z-index:101;background:rgba(0,0,0,0.4);display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto;}
+#tocPanel.open{display:flex;}
+.tocPanelInner{background:#fafafa;border:1px solid #bbbbbb;border-radius:10px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.25);overflow:hidden;}
+.tocPanelHead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #dddddd;background:#ffffff;}
+body.theme-dark .tocPanelInner{background:#161616;border-color:#444444;}
+body.theme-dark .tocPanelHead{background:#1e1e1e;border-color:#333333;}
+#tocList{padding:0 14px 14px;overflow-y:auto;max-height:calc(80vh - 60px);}
+#tocList .toclist,#tocList{padding:0;}
+#tocList>div,#tocList>span{padding:10px 0;}
+body.theme-dark #tocList>span{border-bottom-color:#2e2e2e;}
+#rdMeta{display:none;}
 </style>
 </head>
 <body>
@@ -77,32 +107,40 @@ body.theme-dark .toclist a{border-color:#2e2e2e;color:#7db2ff}
   <div id="libList"></div>
  </div>
  <div id="vRead" style="display:none">
-  <div class="bar">
-   <button class="btn" id="btnBack" type="button">« 书库</button>
-   <button class="btn" id="btnToc" type="button">目录</button>
-   <button class="btn" id="btnFsUp" type="button">A+</button>
-   <button class="btn" id="btnFsDown" type="button">A-</button>
-   <button class="btn" id="btnLh" type="button">行距</button>
-   <button class="btn" id="btnTheme" type="button">亮/暗</button>
+   <!-- 悬浮顶栏：默认收起在屏幕上方外，点右上小圆钮弹出，再点收起 -->
+   <button class="ovly-toggle top-toggle" id="btnTopToggle" type="button" aria-label="展开/收起顶部工具栏">▼</button>
+   <div class="ovly-bar top-bar" id="rdTopBar">
+    <button class="btn" id="btnBack" type="button">« 书库</button>
+    <button class="btn" id="btnToc" type="button">目录</button>
+    <button class="btn" id="btnFsUp" type="button">A+</button>
+    <button class="btn" id="btnFsDown" type="button">A-</button>
+    <button class="btn" id="btnLh" type="button">行距</button>
+    <button class="btn" id="btnTheme" type="button">亮/暗</button>
+   </div>
+   <!-- 目录：独立悬浮面板，不占正文流 -->
+   <div id="tocPanel">
+    <div class="tocPanelInner">
+     <div class="tocPanelHead">
+      <span class="box-title">目录</span>
+      <button class="btn" id="btnTocClose" type="button" style="padding:4px 10px;font-size:.85em">关闭</button>
+     </div>
+     <div class="toclist" id="tocList"></div>
+    </div>
+   </div>
+   <!-- 正文 -->
+   <div class="rd-content" id="rdContent"></div>
+   <div class="pinfo" id="rdInfo" style="text-align:center;font-size:.82em;color:#888888;padding:6px 0;min-height:0"></div>
+   <!-- 悬浮底栏 -->
+   <button class="ovly-toggle bot-toggle" id="btnBotToggle" type="button" aria-label="展开/收起底部工具栏">▲</button>
+   <div class="ovly-bar bot-bar" id="rdBotBar">
+    <button class="btn" id="btnPrev" type="button">« 上一页</button>
+    <span style="font-size:.9em;white-space:nowrap">第 <b id="pgNow">1</b> / <span id="pgTotal">1</span> 页</span>
+    <input class="pginput" id="pgInput" type="text" placeholder="页码" style="width:60px;padding:6px 8px">
+    <button class="btn" id="btnGo" type="button">跳转</button>
+    <button class="btn" id="btnNext" type="button">下一页 »</button>
+   </div>
   </div>
-  <div class="box" id="tocBox">
-   <div class="box-title">目录</div>
-   <div class="toclist" id="tocList"></div>
-  </div>
-  <div class="pgbar">
-   第 <b id="pgNow">1</b> / <span id="pgTotal">1</span> 页
-   <input class="pginput" id="pgInput" type="text" placeholder="页码">
-   <button class="btn" id="btnGo" type="button">跳转</button>
-   <span class="pinfo" id="rdInfo"></span>
-  </div>
-  <div class="rd-content" id="rdContent"></div>
-  <div class="pgbar">
-   <button class="btn" id="btnPrev" type="button">« 上一页</button>
-   <button class="btn" id="btnNext" type="button">下一页 »</button>
-  </div>
-  <div class="mini" id="rdMeta"></div>
- </div>
- <div id="vTrash" style="display:none">
+  <div id="vTrash" style="display:none">
   <div class="bar">
    <button class="btn" id="btnBack2" type="button">« 返回书库</button>
    <button class="btn" id="btnEmpty" type="button">清空回收站</button>
@@ -393,8 +431,6 @@ function renderReader(){
  el.style.lineHeight=String(RD_LH);
  setText('pgNow',PAGE);
  setText('pgTotal',PAGES.length);
- var rm=$('rdMeta');
- if(rm){rm.textContent='《'+(CUR.title||'')+'》 · 共 '+CONTENT.length+' 字 · 第 '+PAGE+' / '+PAGES.length+' 页（'+calcPct(PAGE,PAGES.length)+'）';}
  try{window.scrollTo(0,0);}catch(e){}
 }
 
@@ -434,18 +470,48 @@ function saveProgressNow(){
 }
 function backToLib(){saveProgressNow();show('lib');renderLib();}
 
-function toggleToc(){
- var box=$('tocBox');if(!box)return;
- if(box.style.display==='block'){box.style.display='none';return;}
- if(!CONTENT)return;
+function closeToc(){var p=$('tocPanel');if(p)p.classList.remove('open');}
+function openToc(){
+ var p=$('tocPanel');if(!p)return;
+ if(!CONTENT){msg('当前没有正文，无法生成目录');return;}
  var toc=buildToc(CONTENT);var h='';
  if(!toc.length){h='<div class="mini">未识别到章节标记（支持「第X章」或 Markdown 标题行）</div>';}
  for(var i=0;i<toc.length;i++){
   var pg=pageOfPos(PAGES,toc[i].pos);
-  h+='<span style="display:block;padding:8px 0;border-bottom:1px solid #eeeeee;color:#0055cc;cursor:pointer;word-break:break-all" onclick="goPage('+pg+')">'+esc(toc[i].t)+'</span>';
+  h+='<span style="display:block;padding:10px 0;border-bottom:1px solid #eeeeee;color:#0055cc;cursor:pointer;word-break:break-all" onclick="closeToc();goPage('+pg+')">'+esc(toc[i].t)+'</span>';
  }
  var list=$('tocList');if(list){list.innerHTML=h;}
- box.style.display='block';
+ p.classList.add('open');
+ // 打开目录时同时收起上下栏，避免堆叠
+ var tb=$('rdTopBar');if(tb)tb.classList.remove('open');
+ var bb=$('rdBotBar');if(bb)bb.classList.remove('open');
+ var tg=$('btnTopToggle');if(tg){tg.classList.remove('is-open');tg.textContent='▼';}
+ var tg2=$('btnBotToggle');if(tg2){tg2.classList.remove('is-open');tg2.textContent='▲';}
+}
+function toggleToc(){
+ var p=$('tocPanel');if(!p)return;
+ if(p.classList.contains('open')){closeToc();return;}
+ openToc();
+}
+function toggleBar(which){
+ var bar=$(which==='top'?'rdTopBar':'rdBotBar');
+ var tog=$(which==='top'?'btnTopToggle':'btnBotToggle');
+ if(!bar||!tog)return;
+ var isOpen=bar.classList.contains('open');
+ if(isOpen){
+  bar.classList.remove('open');
+  tog.classList.remove('is-open');
+  tog.textContent=(which==='top'?'▼':'▲');
+ }else{
+  // 打开当前栏时同时关闭另一栏 + 关闭目录
+  var other=$(which==='top'?'rdBotBar':'rdTopBar');
+  var otherTog=$(which==='top'?'btnBotToggle':'btnTopToggle');
+  if(other){other.classList.remove('open');if(otherTog){otherTog.classList.remove('is-open');otherTog.textContent=(which==='top'?'▲':'▼');}}
+  closeToc();
+  bar.classList.add('open');
+  tog.classList.add('is-open');
+  tog.textContent='\u00d7';
+ }
 }
 
 function setFs(n,skip){
@@ -1056,6 +1122,9 @@ function bind(){
  on($('btnPrev'),'click',prevPage);
  on($('btnNext'),'click',nextPage);
  on($('btnToc'),'click',toggleToc);
+ on($('btnTocClose'),'click',closeToc);
+ on($('btnTopToggle'),'click',function(){toggleBar('top');});
+ on($('btnBotToggle'),'click',function(){toggleBar('bot');});
  on($('btnGo'),'click',function(){var n=val('pgInput');if(n){goPage(n);var pi=$('pgInput');if(pi)pi.value='';}});
  on($('pgInput'),'keyup',function(e){e=e||window.event;var k=e.keyCode||e.which;if(k===13){var n=this.value;if(n){goPage(n);this.value='';}}});
  on($('btnFsUp'),'click',function(){setFs(RD_FS+1);});
@@ -1080,6 +1149,17 @@ function bind(){
  if(rc){
   rc.onclick=function(){
    try{if(window.getSelection){var s=window.getSelection();if(s&&String(s)!=='')return;}}catch(e){}
+   // 若任何栏/目录正展开：点正文一次先收起它们，不翻页（最常规阅读体验）
+   var tb=$('rdTopBar'),bb=$('rdBotBar'),tp=$('tocPanel');
+   var anyOpen=(tb&&tb.classList.contains('open'))||(bb&&bb.classList.contains('open'))||(tp&&tp.classList.contains('open'));
+   if(anyOpen){
+    if(tb)tb.classList.remove('open');
+    if(bb)bb.classList.remove('open');
+    if(tp)tp.classList.remove('open');
+    var tg=$('btnTopToggle');if(tg){tg.classList.remove('is-open');tg.textContent='▼';}
+    var tg2=$('btnBotToggle');if(tg2){tg2.classList.remove('is-open');tg2.textContent='▲';}
+    return;
+   }
    if(CUR&&PAGE<PAGES.length){nextPage();}
   };
  }
