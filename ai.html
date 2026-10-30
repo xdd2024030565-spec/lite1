@@ -14,6 +14,12 @@
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif;
   --r:3px; --r-lg:5px;
+  /* 兼容别名：早期代码里散落着 --danger/--fg2/--bg2/--border 这套名字，
+     它们从未定义过，导致「错误提示不变红、工具结果底色透明、思考框没边框」。
+     统一别名到现行设计令牌，随明暗主题自动切换。 */
+  --danger:var(--err); --fg2:var(--fg-dim); --bg2:var(--bg-elev); --border:var(--line);
+  --sh-1:0 1px 2px rgba(0,0,0,.3);
+  --sh-2:0 10px 30px rgba(0,0,0,.4);
 }
 :root[data-theme=light]{
   --bg:#ffffff; --bg-elev:#f6f8fa; --bg-sunken:#eaeef2;
@@ -53,20 +59,37 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 
 /* ===== 顶栏 ===== */
 .topbar{
-  height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;
+  height:48px;display:flex;align-items:center;gap:8px;padding:0 10px;
   border-bottom:1px solid var(--line);background:var(--bg-elev);flex-shrink:0;z-index:50;
 }
-.brand{display:flex;align-items:center;gap:8px;min-width:0}
+.brand{display:flex;align-items:center;gap:8px;min-width:0;flex-shrink:0}
 .logo{
-  width:22px;height:22px;border-radius:var(--r);display:grid;place-items:center;
+  width:24px;height:24px;border-radius:var(--r);display:grid;place-items:center;
   background:var(--acc-dim);color:#fff;font-size:12px;font-weight:700;flex-shrink:0;font-family:var(--mono);
 }
-.brand h1{font-size:13px;font-weight:600;letter-spacing:0}
+.brand h1{font-size:13px;font-weight:600;letter-spacing:0;white-space:nowrap}
 .brand small{display:none}
-.topbar .sp{flex:1}
+.topbar .sp{flex:1;min-width:4px}
+.topbar .btn{min-height:30px}
+.topbar .btn.icon{width:30px;padding:0;justify-content:center}
 .chip{
-  font-size:11px;padding:1px 6px;border-radius:2px;font-family:var(--mono);
+  font-size:11px;padding:2px 7px;border-radius:2px;font-family:var(--mono);
   background:var(--bg-sunken);color:var(--fg-dim);border:1px solid var(--line);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:36vw;
+  display:inline-flex;align-items:center;gap:5px;flex-shrink:1;min-width:0;
+}
+.chip #statusText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.chip .cdot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.chip.off{color:var(--fg-faint);border-style:dashed;background:transparent}
+.chip.off .cdot{background:var(--fg-faint)}
+.chip.busy .cdot{background:var(--warn)}
+.chip.tap{cursor:pointer}
+.chip.tap:hover{border-color:var(--fg-faint);color:var(--fg)}
+@media(max-width:680px){
+  .brand h1{display:none}          /* 窄屏只留 logo：标题折行是顶栏错位的根源 */
+  .chip{max-width:30vw}
+  #ctxChip{display:none !important} /* 窄屏用顶部那条 ctxbar 表示用量，省出空间 */
+  .topbar .lbl{display:none}       /* NEW / SETTINGS 收成图标按钮 */
 }
 
 /* ===== 布局 ===== */
@@ -93,9 +116,13 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 .session-item:hover,.provider-item:hover{background:var(--line-strong)}
 .session-item.active,.provider-item.active{background:var(--acc-bg);border-left-color:var(--acc);color:var(--acc)}
 .session-item .t,.provider-item .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-item .cnt{font-size:9px;font-family:var(--mono);color:var(--fg-faint);border:1px solid var(--line);border-radius:2px;padding:0 4px;flex-shrink:0}
 .session-item .del{opacity:0;color:var(--fg-dim);border:0;background:transparent;padding:0 2px;font-size:13px}
-.session-item:hover .del{opacity:.6}
-.session-item .del:hover{opacity:1;color:var(--err)}
+.session-item:hover .del,.session-item.active .del{opacity:.6}
+.session-item .del:hover{opacity:1;color:var(--acc)}
+.session-item .del.risk:hover{color:var(--err)}
+/* 触屏没有 hover，操作按钮常显，否则根本点不到 */
+@media(hover:none){.session-item .del{opacity:.5}}
 .dot{width:6px;height:6px;border-radius:0;background:var(--ok);flex-shrink:0}
 .provider-item.off .dot{background:var(--fg-faint)}
 .model-sel,.panel select,.panel input{
@@ -231,6 +258,65 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 .empty h2{color:var(--fg);font-size:15px;margin-bottom:6px;font-family:var(--mono);font-weight:600}
 .empty code{font-family:var(--mono);font-size:11px;background:var(--bg-elev);padding:2px 6px;border:1px solid var(--line);border-radius:2px;color:var(--acc)}
 
+/* ===== 欢迎屏（新建/空会话）===== */
+.welcome{max-width:760px;margin:0 auto;padding:min(9vh,64px) 20px 20px}
+.wc-hero{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.wc-logo{
+  width:40px;height:40px;border-radius:var(--r-lg);display:grid;place-items:center;flex-shrink:0;
+  background:var(--acc-dim);color:#fff;font-family:var(--mono);font-weight:700;font-size:17px;
+}
+.wc-hero h2{font-size:19px;font-weight:650;letter-spacing:-.01em;line-height:1.25}
+.wc-sub{color:var(--fg-dim);font-size:12.5px;margin:2px 0 22px;line-height:1.6}
+.wc-sub b{color:var(--fg);font-weight:600}
+.wc-warn{
+  display:flex;gap:9px;align-items:flex-start;margin:0 0 18px;padding:10px 12px;font-size:12px;
+  background:var(--bg-elev);border:1px solid var(--line);border-left:2px solid var(--warn);border-radius:0 var(--r) var(--r) 0;
+}
+.wc-warn .t{flex:1;color:var(--fg-dim);line-height:1.6}
+.wc-warn b{color:var(--fg)}
+.wc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:22px}
+.wc-card{
+  text-align:left;display:flex;gap:10px;align-items:flex-start;padding:12px;
+  background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--r-lg);
+  cursor:pointer;transition:border-color .12s,transform .12s,background .12s;color:inherit;font-family:inherit;
+}
+.wc-card:hover{border-color:var(--acc);background:var(--acc-bg);transform:translateY(-1px)}
+.wc-card .ic{font-size:17px;line-height:1.2;flex-shrink:0}
+.wc-card .tx{flex:1;min-width:0;display:block}
+.wc-card .tt{display:block;font-size:12.5px;font-weight:600;color:var(--fg);margin-bottom:3px}
+.wc-card .dd{display:block;font-size:11px;color:var(--fg-dim);line-height:1.5}
+.wc-sec{font-size:10px;font-weight:600;color:var(--fg-faint);letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono);margin:0 0 9px}
+.wc-list{display:flex;flex-direction:column;gap:6px}
+.wc-chip{
+  display:flex;align-items:center;gap:9px;padding:9px 11px;font-size:12px;text-align:left;
+  background:transparent;border:1px solid var(--line);border-radius:var(--r);color:var(--fg-dim);
+  cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s;
+}
+.wc-chip:hover{border-color:var(--acc);color:var(--fg)}
+.wc-chip .ar{margin-left:auto;color:var(--fg-faint)}
+.wc-foot{margin-top:22px;font-size:10.5px;color:var(--fg-faint);font-family:var(--mono);line-height:1.8}
+
+/* ===== 消息操作条 ===== */
+.msg-acts{display:flex;gap:4px;margin-top:7px;opacity:0;transition:opacity .12s;flex-wrap:wrap}
+.msg:hover .msg-acts,.msg-acts:focus-within{opacity:1}
+.msg-acts .a{
+  font-size:10.5px;font-family:var(--mono);padding:2px 7px;border-radius:2px;cursor:pointer;
+  background:transparent;border:1px solid var(--line);color:var(--fg-dim);line-height:1.6;
+}
+.msg-acts .a:hover{color:var(--acc);border-color:var(--acc)}
+.msg-acts .a.danger:hover{color:var(--err);border-color:var(--err)}
+@media(hover:none){.msg-acts{opacity:1}}   /* 触屏没有 hover，常显 */
+
+/* ===== 回到底部 ===== */
+.to-bottom{
+  position:absolute;right:18px;bottom:74px;z-index:30;width:32px;height:32px;border-radius:50%;
+  display:none;place-items:center;cursor:pointer;font-size:13px;
+  background:var(--bg-elev);border:1px solid var(--line);color:var(--fg-dim);box-shadow:var(--sh-1);
+}
+.to-bottom.show{display:grid}
+.to-bottom:hover{color:var(--acc);border-color:var(--acc)}
+.main{position:relative}
+
 /* 提示条 */
 .toast{
   position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(8px);
@@ -312,12 +398,12 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 <div class="topbar">
   <button class="btn menu-btn" id="menuBtn" aria-label="菜单">☰</button>
   <div class="brand"><span class="logo">&gt;_</span><h1>AI Console</h1></div>
-  <span class="chip" id="statusChip">UNCONFIGURED</span>
+  <span class="chip off tap" id="statusChip" title="点这里切换模型 / 查看配置"><span class="cdot"></span><span id="statusText">未配置</span></span>
   <span class="chip" id="ctxChip" style="display:none">CTX 0%</span>
   <span class="sp"></span>
-  <button class="btn small" id="btnTheme" title="切换主题">◐</button>
-  <button class="btn small" id="btnNew">+ NEW</button>
-  <button class="btn small" id="btnSettings">SETTINGS</button>
+  <button class="btn small icon" id="btnTheme" title="切换主题" aria-label="切换主题">◐</button>
+  <button class="btn small" id="btnNew" title="新建对话">＋<span class="lbl"> NEW</span></button>
+  <button class="btn small" id="btnSettings" title="设置">⚙<span class="lbl"> SETTINGS</span></button>
 </div>
 <div class="ctxbar" id="ctxbar"><i></i></div>
 <div class="layout">
@@ -347,7 +433,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
     <!-- 对话 -->
     <div class="sb-view" id="sbChats" style="display:none">
       <section class="panel">
-        <h3>CHATS<span class="sp"></span><button class="btn small" id="btnNew2">＋</button></h3>
+        <h3>CHATS<span class="sp"></span><button class="btn small" id="btnExportChat" title="导出当前对话为 Markdown">导出</button><button class="btn small" id="btnNew2">＋</button></h3>
         <div class="session-list" id="sessionList"></div>
       </section>
     </div>
@@ -357,6 +443,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
         <h3>MODELS<span class="sp"></span><button class="btn small" id="btnAddProvider">添加</button></h3>
         <div id="providerList"></div>
         <select class="model-sel" id="modelSel"></select>
+        <div id="toolStatus" class="hint" style="margin-top:8px"></div>
       </section>
     </div>
     <!-- 插件 -->
@@ -408,6 +495,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 </aside>
   <main class="main">
     <div class="msgs" id="msgs"></div>
+    <button class="to-bottom" id="toBottom" title="回到底部" aria-label="回到底部">↓</button>
     <div class="inputbar">
       <div class="inputwrap">
         <textarea id="input" placeholder="输入消息…" rows="1"></textarea>
@@ -786,26 +874,89 @@ $('pSave').onclick=()=>{
 // ===== 会话 =====
 function renderSessions(){
   const el=$('sessionList');
+  if(!el)return;
+  if(!sessions.length){el.innerHTML='<div style="font-size:12px;color:var(--fg2);padding:8px">暂无对话</div>';return}
   el.innerHTML=sessions.slice().reverse().map(s=>{
     const a=s.id===activeSessionId;
-    const title=s.title||s.messages.find(m=>m.role==='user')?.content?.slice(0,20)||'新对话';
-    return '<div class="session-item'+(a?' active':'')+'" data-sid="'+s.id+'"><span class="t">'+esc(title)+'</span><button class="del" data-del="'+s.id+'">✕</button></div>';
-  }).join('')||'<div style="font-size:12px;color:var(--fg2);padding:8px">暂无对话</div>';
+    const title=s.title||((s.messages.find(m=>m.role==='user')||{}).content||'').slice(0,20)||'新对话';
+    const n=s.messages.filter(m=>m.role==='user').length;
+    return '<div class="session-item'+(a?' active':'')+'" data-sid="'+s.id+'">'+
+      '<span class="t">'+esc(title)+'</span>'+
+      (n?'<span class="cnt">'+n+'</span>':'')+
+      '<button class="del" data-ren="'+s.id+'" title="重命名">✎</button>'+
+      '<button class="del risk" data-del="'+s.id+'" title="删除">✕</button>'+
+      '</div>';
+  }).join('');
   el.querySelectorAll('.session-item').forEach(it=>it.onclick=e=>{
-    if(e.target.classList.contains('del')){sessions=sessions.filter(s=>s.id!==e.target.dataset.del);if(activeSessionId===e.target.dataset.del){activeSessionId=sessions[0]?sessions[0].id:null;}persist();renderAll();return}
+    const ren=e.target.dataset?e.target.dataset.ren:null;
+    const del=e.target.dataset?e.target.dataset.del:null;
+    if(del){
+      e.stopPropagation();
+      const s=sessions.find(x=>x.id===del);
+      // 以前点一下就删，没有确认；对话是本地唯一副本，误触就没了
+      if(!confirm('删除对话「'+((s&&s.title)||'未命名')+'」？\n该对话只存在本机，删除后无法恢复。'))return;
+      sessions=sessions.filter(x=>x.id!==del);
+      if(activeSessionId===del)activeSessionId=sessions[0]?sessions[0].id:null;
+      persist();renderAll();toast('已删除对话');return;
+    }
+    if(ren){
+      e.stopPropagation();
+      const s=sessions.find(x=>x.id===ren);if(!s)return;
+      const t=prompt('重命名对话：',s.title||'');
+      if(t===null)return;
+      s.title=(t.trim()||s.title);persist();renderSessions();return;
+    }
     activeSessionId=it.dataset.sid;persist();renderAll();
   });
 }
 function newSession(){
+  // 已经有一个空对话时直接复用，避免连点 + NEW 堆出一串「新对话」
+  const cur=curSession();
+  if(cur&&(!cur.messages||!cur.messages.length)){
+    activeSessionId=cur.id;persist();renderAll();$('input').focus();return;
+  }
   const s={id:uid(),title:'新对话',messages:[],created:Date.now()};
   sessions.push(s);activeSessionId=s.id;persist();renderAll();$('input').focus();
 }
+/* 导出当前对话为 Markdown */
+function exportChat(){
+  const s=curSession();
+  if(!s||!s.messages.length){toast('当前对话还是空的');return}
+  let out='# '+(s.title||'对话')+'\n\n> 导出自 AI Console · '+new Date().toLocaleString()+'\n\n---\n\n';
+  s.messages.forEach(function(m){
+    if(m.role==='system'){
+      if(m._summary)out+='## 历史摘要\n\n'+String(m.content||'')+'\n\n';
+      return;
+    }
+    if(m.role==='user'){out+='## 你\n\n'+String(m.content||'')+'\n\n';return}
+    if(m.role==='assistant'){
+      if(m.reasoning)out+='<details><summary>思考过程</summary>\n\n'+m.reasoning+'\n\n</details>\n\n';
+      if(m.content)out+='## AI\n\n'+String(m.content)+'\n\n';
+      if(m.toolCalls&&m.toolCalls.length)out+='> 调用工具：'+m.toolCalls.map(function(t){return t.function&&t.function.name}).join('、')+'\n\n';
+      return;
+    }
+    if(m.role==='tool')out+='> 工具 `'+String(m.name||'')+'` 返回：\n\n```\n'+String(m.content||'').slice(0,4000)+'\n```\n\n';
+  });
+  try{
+    const blob=new Blob([out],{type:'text/markdown;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='chat-'+String(s.title||'chat').replace(/[^\w\u4e00-\u9fa5-]+/g,'_').slice(0,30)+'-'+new Date().toISOString().slice(0,10)+'.md';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+    toast('已导出 Markdown');
+  }catch(e){toast('导出失败：'+e.message)}
+}
 $('btnNew').onclick=newSession;$('btnNew2').onclick=newSession;
+$('btnExportChat').onclick=exportChat;
 
 // ===== 消息渲染 =====
 function renderMsgs(){
   const s=curSession();const el=$('msgs');
-  if(!s){el.innerHTML='<div class="empty"><div class="big">&gt;_</div><h2>No active session</h2>配置提供商后开始对话 · <code>Enter</code> 发送<br><button class="btn primary" style="margin-top:14px" onclick="newSession()">+ NEW CHAT</button></div>';return}
+  if(!el)return;
+  if(!s){el.innerHTML='<div class="empty"><div class="big">&gt;_</div><h2>No active session</h2>配置提供商后开始对话 · <code>Enter</code> 发送<br><button class="btn primary" style="margin-top:14px" onclick="newSession()">+ NEW CHAT</button></div>';updateCtxBar();return}
+  // 空会话：以前这里什么都不渲染，只留一大片空白；现在给一个明确的起点
+  if(!s.messages.length){el.innerHTML=welcomeHtml();updateCtxBar();return}
   el.innerHTML=s.messages.map((m,__i)=>{
     if(m.role==='system')return '';
 
@@ -827,10 +978,113 @@ function renderMsgs(){
     const bubbleId=m._streaming?' id="streamBubble"':'';
     const noticeHtml=m._notice?'<div class="hint" style="color:var(--fg2);margin-bottom:6px">'+esc(m._notice)+'</div>':'';
     const errHtml=m._error?('<div class="hint" style="color:var(--danger);margin-top:8px">'+esc(m._errText||'')+'</div><div style="margin-top:8px"><button class="btn small" onclick="retryThis()">重试</button></div>'):'';
-    return '<div class="msg '+(m.role==='user'?'user':'')+'"><div class="role">'+(m.role==='user'?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+noticeHtml+reasoningHtml+md(m.content||'')+(m._streaming?'<span class="typing-dot"><i></i><i></i><i></i></span>':'')+errHtml+'</div></div>';
+    const isUser=(m.role==='user');
+    const acts=m._streaming?'':('<div class="msg-acts">'+
+      '<button class="a" onclick="copyMsg('+__i+')">复制</button>'+
+      (isUser?'':'<button class="a" onclick="regenFrom('+__i+')" '+(sending?'disabled':'')+'>重新生成</button>')+
+      '<button class="a danger" onclick="delMsg('+__i+')">删除</button>'+
+      (isUser?'<button class="a" onclick="editMsg('+__i+')">编辑重发</button>':'')+
+      '</div>');
+    return '<div class="msg '+(isUser?'user':'')+'"><div class="role">'+(isUser?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+noticeHtml+reasoningHtml+md(m.content||'')+(m._streaming?'<span class="typing-dot"><i></i><i></i><i></i></span>':'')+errHtml+'</div>'+acts+'</div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
   updateCtxBar();
+}
+
+/* ===== 欢迎屏：空会话时的起点，取代过去的一片空白 ===== */
+function welcomeHtml(){
+  const p=activeProvider();
+  const ready=p?(p.selfProxied?true:!!p.key):false;
+  const mdl=p?(selectedModel||((p.models||[])[0]||'')):'';
+  const warn=!p
+    ? '<div class="wc-warn"><span>⚠️</span><div class="t"><b>还没有配置模型提供商。</b>可以先用内置的「DeepSeek 网页版」（无需 Key），或添加任意 OpenAI 兼容接口。</div></div>'
+    : (ready?'':'<div class="wc-warn"><span>⚠️</span><div class="t"><b>'+esc(p.name)+' 尚未设置 API Key</b>，发送会直接报错。点右上角状态条即可配置。</div></div>');
+  const cards=[
+    ['🤖','模型与提供商','添加 / 切换 OpenAI 兼容模型，一键拉取模型列表','showSbView(\'models\');openSidebar()'],
+    ['🛒','能力市场','从 MCP 官方注册表 / Smithery / SKILL.md 一键装能力','openMarket(\'mcp\')'],
+    ['🎯','技能','把常用行为规范注入系统提示词（代码审查、翻译腔调…）','showSbView(\'skills\');openSidebar()'],
+    ['🛠','内置工具','联网搜索、抓网页、算数等内置能力开关','renderToolsModal();$(\'toolsModal\').classList.add(\'open\')']
+  ];
+  const tips=[
+    ['Enter 发送 · Shift+Enter 换行',''],
+    ['Esc 停止生成','srStopGen()'],
+    ['输入 / 快速聚焦输入框','focusInput()']
+  ];
+  let h='<div class="welcome">';
+  h+='<div class="wc-hero"><div class="wc-logo">&gt;_</div><div><h2>AI Console</h2></div></div>';
+  h+='<div class="wc-sub">当前模型：<b>'+esc(p?(p.name+(mdl?' · '+mdl:'')):'未配置')+'</b>　·　数据全部存在本机浏览器，不上传任何服务器</div>';
+  h+=warn;
+  h+='<div class="wc-sec">从这里开始</div><div class="wc-grid">';
+  cards.forEach(function(c){
+    h+='<button class="wc-card" onclick="'+c[3]+'"><span class="ic">'+c[0]+'</span><span class="tx"><span class="tt">'+c[1]+'</span><span class="dd">'+c[2]+'</span></span></button>';
+  });
+  h+='</div>';
+  h+='<div class="wc-sec">快捷操作</div><div class="wc-list">';
+  tips.forEach(function(t){
+    h+='<button class="wc-chip" '+(t[1]?'onclick="'+t[1]+'"':'')+'>'+esc(t[0])+(t[1]?'<span class="ar">›</span>':'')+'</button>';
+  });
+  h+='</div>';
+  h+='<div class="wc-foot">'+sessions.length+' 个对话 · '+(builtinTools.filter(x=>x.enabled).length)+' 个内置工具 · '+(skills.filter(x=>x.enabled!==false).length)+' 个技能 · 快捷键：Enter 发送 / Esc 停止</div>';
+  h+='</div>';
+  return h;
+}
+function openSidebar(){
+  const sb=$('sidebar'),bd=$('sbBackdrop');
+  if(sb&&getComputedStyle(sb).position==='fixed'){sb.classList.add('open');if(bd)bd.classList.add('open');}
+}
+function focusInput(){const i=$('input');if(i){i.focus();}}
+function srStopGen(){if(sending){stopFlag=true;}}
+/* ===== 消息操作 ===== */
+function copyText(t){
+  t=String(t||'');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast('已复制'),()=>legacyCopy(t));
+  }else legacyCopy(t);
+}
+function legacyCopy(t){
+  try{
+    const ta=document.createElement('textarea');ta.value=t;
+    ta.style.cssText='position:fixed;left:-9999px;top:0';document.body.appendChild(ta);
+    ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制');
+  }catch(e){toast('复制失败，请长按选择文本')}
+}
+function copyMsg(i){const s=curSession();if(s&&s.messages[i])copyText(s.messages[i].content);}
+function delMsg(i){
+  const s=curSession();if(!s||!s.messages[i])return;
+  s.messages.splice(i,1);renderMsgs();persist();toast('已删除该条');
+}
+async function regenFrom(i){
+  const s=curSession();
+  if(!s||sending)return;
+  s.messages=s.messages.slice(0,i);      // 丢掉这条及之后的内容，重新生成
+  renderMsgs();persist();
+  await runCompletion();
+}
+/* 编辑并重发：把内容填回输入框，删除该条及其之后，等用户改完再发 */
+function editMsg(i){
+  const s=curSession();
+  if(!s||sending||!s.messages[i])return;
+  const m=s.messages[i];
+  s.messages=s.messages.slice(0,i);
+  const inp=$('input');
+  if(inp){inp.value=String(m.content||'');inp.focus();autoGrow();}
+  renderMsgs();persist();
+}
+/* ===== 回到底部 ===== */
+function msgsNearBottom(){
+  const el=$('msgs');if(!el)return true;
+  return el.scrollHeight-el.scrollTop-el.clientHeight<120;
+}
+function scrollMsgsToBottom(){
+  const el=$('msgs');if(el)el.scrollTop=el.scrollHeight;
+  const b=$('toBottom');if(b)b.classList.remove('show');
+}
+function bindMsgsScroll(){
+  const el=$('msgs');if(!el)return;
+  el.addEventListener('scroll',()=>{
+    const b=$('toBottom');
+    if(b)b.classList.toggle('show',!msgsNearBottom());
+  },{passive:true});
 }
 // 极简语法高亮
 const HL_KW={};
@@ -1450,15 +1704,25 @@ function renderAll(){renderProviders();renderSessions();renderMsgs();updateStatu
 // ===== 工具/MCP/插件管理 UI =====
 function updateStatus(){
   const p=activeProvider();
-  const chip=$('statusChip');
-  if(!p){chip.textContent='未配置';chip.className='chip off';return}
-  chip.textContent=(p.key?'✓ ':'')+p.name+(p.proxy?' · 代理':'');
-  chip.className='chip'+(p.key?'':' off');
+  const chip=$('statusChip'),txt=$('statusText');
+  if(!p){
+    if(txt)txt.textContent='未配置';
+    if(chip){chip.className='chip off tap';chip.title='点这里添加提供商';}
+  }else{
+    const ready=p.selfProxied?true:!!p.key;      // 反代类提供商的凭证在服务端
+    const mdl=selectedModel||((p.models||[])[0]||'');
+    if(txt)txt.textContent=p.name+(mdl?' · '+mdl:'')+(p.proxy?' · 代理':'');
+    if(chip){
+      chip.className='chip tap'+(ready?'':' off')+(sending?' busy':'');
+      chip.title=ready?('当前：'+p.name+(mdl?' · '+mdl:'')+'\n点击切换模型')
+                      :'未设置 API Key（点击配置）';
+    }
+  }
   const ts=$('toolStatus');
   const bt=builtinTools.filter(t=>t.enabled).length;
   const mc=mcpServers.filter(s=>s.enabled!==false).length;
   const pl=plugins.filter(x=>x.enabled!==false).length;
-  if(ts)ts.innerHTML='<div style="font-size:11px;color:var(--fg2)">内置 '+bt+' · MCP '+mc+' · 插件 '+pl+'</div>';
+  if(ts)ts.textContent='已启用：内置工具 '+bt+' · MCP '+mc+' · 插件 '+pl;
 }
 function renderToolsModal(){
   // 内置工具
@@ -1912,6 +2176,19 @@ async function chatStreamFull(messages,onDelta,tools){
   abortCtrl=new AbortController();
   const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body),signal:abortCtrl.signal});
   if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
+  // 有些代理在出错时会回 200 + 普通 JSON 而不是 SSE；此时 r.body 或流解析都不成立
+  if(!r.body||!r.body.getReader){
+    let txt="";try{txt=await r.text()}catch(e){}
+    const j=tryParse(txt);
+    const c=j&&j.choices&&j.choices[0];
+    if(c){
+      const msg=c.message||c.delta||{};
+      abortCtrl=null;
+      return {content:msg.content||"",reasoning:msg.reasoning_content||"",toolCalls:(msg.tool_calls||[])};
+    }
+    abortCtrl=null;
+    throw new Error("接口未返回流式数据："+String(txt).slice(0,200));
+  }
   const reader=r.body.getReader();
   const dec=new TextDecoder();
   let buf="",full="",reasoning="";
@@ -1925,7 +2202,11 @@ async function chatStreamFull(messages,onDelta,tools){
     const ch=j.choices&&j.choices[0];
     if(!ch)return;
     const delta=ch.delta||{};
-    if(delta.reasoning_content){reasoning+=delta.reasoning_content;}
+    if(delta.reasoning_content){
+      reasoning+=delta.reasoning_content;
+      // 只输出思考过程时也要有实时反馈，否则界面像卡住了
+      if(onDelta)onDelta(full,reasoning);
+    }
     if(delta.content){full+=delta.content;if(onDelta)onDelta(full,reasoning);}
     if(delta.tool_calls){
       delta.tool_calls.forEach(tc=>{
@@ -1979,9 +2260,47 @@ function sleep(ms){
     setTimeout(()=>{clearInterval(t);res("done");},ms);
   });
 }
+/* ===== 主题：auto / dark / light =====
+   此前 ◐ 按钮完全没绑定处理函数，data-theme 永远是 auto，
+   而 CSS 只写了 :root[data-theme=light]，导致浅色主题根本进不去。 */
+var THEME_KEY='ai.theme';
+// 默认保持深色（这个页面的既有观感就是深色控制台）；浅色与跟随系统由按钮切换
+function themePref(){try{return localStorage.getItem(THEME_KEY)||'dark'}catch(e){return 'dark'}}
+function themeResolve(pref){
+  if(pref==='dark'||pref==='light')return pref;
+  try{if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)return 'light';}catch(e){}
+  return 'dark';
+}
+function applyTheme(){
+  const pref=themePref();
+  const eff=themeResolve(pref);
+  document.documentElement.setAttribute('data-theme',eff);
+  const b=$('btnTheme');
+  if(b){
+    b.textContent=(eff==='light')?'☀':'◐';
+    b.title='主题：'+(pref==='auto'?'跟随系统':(pref==='light'?'浅色':'深色'))+'（点击切换）';
+  }
+}
+function cycleTheme(){
+  const order=['dark','light','auto'];
+  const cur=themePref();
+  const next=order[(order.indexOf(cur)+1)%order.length];
+  try{localStorage.setItem(THEME_KEY,next)}catch(e){}
+  applyTheme();
+  toast('主题：'+(next==='auto'?'跟随系统':(next==='light'?'浅色':'深色')));
+}
+function initTheme(){
+  applyTheme();
+  try{
+    if(window.matchMedia){
+      const mq=window.matchMedia('(prefers-color-scheme: light)');
+      const h=function(){if(themePref()==='auto')applyTheme();};
+      if(mq.addEventListener)mq.addEventListener('change',h);else if(mq.addListener)mq.addListener(h);
+    }
+  }catch(e){}
+}
 // 把状态写进当前气泡（不新建消息）
-function setStreamNotice(s,text){
-  const m=s.messages.find(x=>x.role==="assistant"&&x._streaming);
+function setStreamNotice(s,text){  const m=s.messages.find(x=>x.role==="assistant"&&x._streaming);
   if(m){m._notice=text;}
   patchStreamBubble();
 }
@@ -2115,7 +2434,14 @@ async function runCompletion(){
       const m2=s.messages.find(x=>x.role==="assistant"&&x._streaming);
       if(m2)m2._notice="";
       s.messages=s.messages.filter(m=>!(m._streaming));
-      if(partial.content||partial.reasoning){s.messages.push({role:"assistant",content:partial.content||"",reasoning:partial.reasoning||""});}
+      if(partial.content||partial.reasoning){
+        s.messages.push({role:"assistant",content:partial.content||"",reasoning:partial.reasoning||""});
+      }else if(!(partial.toolCalls&&partial.toolCalls.length)){
+        // 既没有正文也没有工具调用：以前这里什么都不留，用户只看到自己的话悬在那里。
+        // 明确告知，并给出重试入口。
+        s.messages.push({role:"assistant",content:"",_error:true,
+          _errText:"模型没有返回任何内容（可能是上游返回了空响应，或被内容策略拦下）。可点重试再来一次。"});
+      }
       const tcs=partial.toolCalls||[];
       if(tcs.length&&!stopFlag){
         s.messages.push({role:"assistant",content:partial.content||"",toolCalls:tcs});
@@ -2222,6 +2548,23 @@ function autoGrow(){const i=$('input');i.style.height='auto';i.style.height=Math
 $('input').addEventListener('input',autoGrow);
 $('menuBtn').onclick=()=>{$('sidebar').classList.add('open');$('sbBackdrop').classList.add('open');};
 $('sbBackdrop').onclick=()=>{$('sidebar').classList.remove('open');$('sbBackdrop').classList.remove('open');};
+// 主题切换（此前是死按钮）
+$('btnTheme').onclick=cycleTheme;
+// 状态条可点：跳到模型页（窄屏顺带把侧栏拉出来）
+$('statusChip').onclick=()=>{showSbView('models');openSidebar();};
+// 回到底部
+$('toBottom').onclick=scrollMsgsToBottom;
+bindMsgsScroll();
+// 快捷键：Esc 停止生成 / Ctrl(Cmd)+K 新对话 / 输入框为空时按 / 聚焦
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&sending){e.preventDefault();stopFlag=true;toast('已停止生成');return;}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();newSession();return;}
+  if(e.key==='/'){
+    const t=e.target&&e.target.tagName;
+    if(t!=='INPUT'&&t!=='TEXTAREA'){e.preventDefault();focusInput();}
+  }
+});
+initTheme();
 $('btnSettings').onclick=()=>{
   $('setTemp').value=settings.temperature||0.7;$('tempVal').textContent=settings.temperature||0.7;
   $('setMaxTokens').value=settings.maxTokens||2048;
