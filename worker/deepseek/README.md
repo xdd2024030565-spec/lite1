@@ -240,3 +240,26 @@ node _r.mjs
 - `DEEPSEEK_TOKENS` 一定要走 `wrangler secret put`，**不要写进 `wrangler.toml`**（会被提交到仓库）。
 - 该 token 等同你的 DeepSeek 账号登录态，泄露后请立刻在网页版退出登录使其失效。
 - 建议设置 `PROXY_KEY`，避免被陌生人白嫖你的额度。
+
+### 不想用 wrangler？用 REST API 直接部署
+
+`wrangler` 依赖 esbuild，在 Android/Termux 这类环境 `npm i -g wrangler` 会因 esbuild
+postinstall 失败而装不上。仓库里带了等价脚本：
+
+```bash
+cd worker/deepseek
+CF_TOKEN=<Cloudflare API Token> DS_TOKEN=<网页版 token，可选> node deploy-api.mjs
+```
+
+它会 `PUT /accounts/{acct}/workers/scripts/deepseek-web`，上传 `deepseek-web.js` +
+`sha3_wasm_bg.wasm`，写入 `ALLOW_ORIGIN/THINKING/SEARCH` 变量与 `DEEPSEEK_TOKENS` secret。
+token 只从环境变量读，不会落盘。
+
+## 已验证（2026-10-31 实机）
+
+- `GET /health` → `{"status":"ok","service":"deepseek-web","runtime":"wasm-sha3","tokens":1,"tokenSource":"secret",...}`
+- `GET /v1/models` → deepseek-chat / deepseek-reasoner，且**无需 token**
+- `POST /v1/chat/completions`（非流式）→ 标准 OpenAI 格式
+- `POST /v1/chat/completions`（流式）→ 137 个 chunk + `[DONE]`，`delta.content` 正常
+- CORS：`Origin: https://lite1-3d8c30u.maozi.io` → `access-control-allow-origin: https://lite1-3d8c30u.maozi.io`
+- 线上站点 <https://xdd2024030565-spec.github.io/lite1/ai.html> 实测可正常对话

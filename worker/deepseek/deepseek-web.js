@@ -282,22 +282,31 @@ function sseChunk(obj) {
 }
 
 // ===== CORS =====
-function corsHeaders(env) {
-  const allow = (env && env.ALLOW_ORIGIN) || '*';
+function corsHeaders(env, request) {
+  // 关键：Access-Control-Allow-Origin 只能是「*」或**恰好一个**来源。
+  // 早先这里直接把 ALLOW_ORIGIN 那一整串（逗号分隔）回给浏览器，
+  // 浏览器判定为非法值 → 前端所有请求都会被 CORS 拦掉（curl 不看 CORS 所以测不出来）。
+  const raw = String((env && env.ALLOW_ORIGIN) || '*').trim();
+  let allow = '*';
+  if (raw !== '*') {
+    const list = raw.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    const origin = (request && request.headers && request.headers.get('Origin')) || '';
+    allow = (origin && list.indexOf(origin) >= 0) ? origin : (list[0] || '*');
+  }
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-DS-PoW-Response',
     'Access-Control-Max-Age': '86400',
     // 允许来源随请求头变化，必须声明 Vary，避免 CDN 缓存串站
     Vary: 'Origin',
   };
 }
 
-function jsonResp(obj, status, env) {
+function jsonResp(obj, status, env, request) {
   return new Response(JSON.stringify(obj), {
     status: status || 200,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env) },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env, request) },
   });
 }
 
@@ -309,7 +318,7 @@ export default {
     path = path.replace(/^\/dsweb/, '') || '/';
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(env) });
+      return new Response(null, { status: 204, headers: corsHeaders(env, request) });
     }
 
     // 健康检查：放在鉴权之前，方便排障
@@ -329,7 +338,7 @@ export default {
           model: DEFAULT_MODEL,
         },
         200,
-        env
+        env, request
       );
     }
 
@@ -338,7 +347,7 @@ export default {
     const clientKey = auth.replace(/^Bearer\s+/i, '').trim();
     const proxyKey = env && env.PROXY_KEY;
     if (proxyKey && clientKey !== proxyKey) {
-      return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env);
+      return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env, request);
     }
 
     // 模型列表：纯静态数据，不需要 token。
@@ -354,7 +363,7 @@ export default {
           ],
         },
         200,
-        env
+        env, request
       );
     }
 
@@ -377,13 +386,13 @@ export default {
             },
           },
           503,
-          env
+          env, request
         );
       }
       return handleChat(request, env, tokens);
     }
 
-    return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env);
+    return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
   },
 };
 
@@ -392,12 +401,12 @@ async function handleChat(request, env, tokens) {
   try {
     body = await request.json();
   } catch (e) {
-    return jsonResp({ error: { message: '请求体不是合法 JSON', type: 'invalid_request' } }, 400, env);
+    return jsonResp({ error: { message: '请求体不是合法 JSON', type: 'invalid_request' } }, 400, env, request);
   }
 
   const messages = body.messages || [];
   if (!messages.length) {
-    return jsonResp({ error: { message: 'messages 不能为空', type: 'invalid_request' } }, 400, env);
+    return jsonResp({ error: { message: 'messages 不能为空', type: 'invalid_request' } }, 400, env, request);
   }
 
   const model = body.model || DEFAULT_MODEL;
@@ -443,8 +452,8 @@ async function handleChat(request, env, tokens) {
         continue; // 换下一个账号
       }
 
-      if (stream) return streamResponse(upstream, model, env, thinking);
-      return await aggregateResponse(upstream, model, env, thinking);
+      if (stream) return streamResponse(upstream, model, env, thinking, request);
+      return await aggregateResponse(upstream, model, env, thinking, request);
     } catch (e) {
       lastErr = e;
       // 会话可能失效，清掉让它重建
@@ -460,12 +469,12 @@ async function handleChat(request, env, tokens) {
       },
     },
     502,
-    env
+    env, request
   );
 }
 
 // 非流式：把上游 SSE 聚合成一次性响应
-async function aggregateResponse(upstream, model, env, thinking) {
+async function aggregateResponse(upstream, model, env, thinking, request) {
   const text = await upstream.text();
   const feed = makeParser();
   let content = '';
@@ -505,12 +514,12 @@ async function aggregateResponse(upstream, model, env, thinking) {
       usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     },
     200,
-    env
+    env, request
   );
 }
 
 // 流式：逐块转发 OpenAI chunk
-function streamResponse(upstream, model, env, thinking) {
+function streamResponse(upstream, model, env, thinking, request) {
   const id = randomId();
   const encoder = new TextEncoder();
   const feed = makeParser();
@@ -585,7 +594,7 @@ function streamResponse(upstream, model, env, thinking) {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      ...corsHeaders(env),
+      ...corsHeaders(env, request),
     },
   });
 }
