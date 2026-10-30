@@ -1,9 +1,15 @@
 name: Deploy DeepSeek Web Worker
 
 # 用 GitHub runner 的干净网络部署 Worker（本机到 Cloudflare 的 API 通道时通时不通，
-# runner 侧稳定）。复用已有 secrets：
-#   CF_API_TOKEN —— 需 Workers Scripts:Edit 权限
-#   CF_ACCOUNT_ID —— Cloudflare Account ID
+# runner 侧稳定）。用到的仓库 secrets：
+#   CF_API_TOKEN    —— 必须。Cloudflare API Token，权限 Workers Scripts:Edit
+#                      https://github.com/xdd2024030565-spec/lite1/settings/secrets/actions
+#   CF_ACCOUNT_ID   —— 可选。Cloudflare Account ID（缺省用内置值）
+#   DEEPSEEK_TOKEN  —— 可选。DeepSeek 网页版 token；不配也能用：
+#                      前端把 token 填进该提供商的 API Key 即可（Worker 会读 Authorization 头）
+#
+# 为什么以前一直失败：仓库里没配 CF_API_TOKEN，本 workflow 在「Check secrets」就退出，
+# 于是 Worker 从没被真正部署过，线上一直是旧的测试桩。
 
 on:
   workflow_dispatch:
@@ -11,6 +17,11 @@ on:
     branches: [main]
     paths:
       - 'worker/deepseek/**'
+      - '.github/workflows/deploy-deepseek.yml'
+
+concurrency:
+  group: deploy-deepseek-web
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -26,10 +37,23 @@ jobs:
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          DS_TOKEN: ${{ secrets.DEEPSEEK_TOKEN }}
         run: |
-          if [ -z "$CF_API_TOKEN" ]; then echo "::error::CF_API_TOKEN 缺失"; exit 1; fi
-          if [ -z "$CF_ACCOUNT_ID" ]; then echo "::warning::CF_ACCOUNT_ID 缺失，尝试用已知值"; fi
-          echo "token 长度: ${#CF_API_TOKEN}"
+          if [ -z "$CF_API_TOKEN" ]; then
+            echo "::error title=缺少 CF_API_TOKEN::无法部署 Worker。请到 https://github.com/${{ github.repository }}/settings/secrets/actions 新增仓库 secret「CF_API_TOKEN」（Cloudflare API Token，权限需含 Workers Scripts:Edit），然后重新运行本 workflow。"
+            echo ""
+            echo "### ❌ 部署未执行：缺少 CF_API_TOKEN" >> $GITHUB_STEP_SUMMARY
+            echo "到 [仓库 secrets 设置](https://github.com/${{ github.repository }}/settings/secrets/actions) 添加：" >> $GITHUB_STEP_SUMMARY
+            echo "- \`CF_API_TOKEN\`（必须，Cloudflare API Token，权限 Workers Scripts:Edit）" >> $GITHUB_STEP_SUMMARY
+            echo "- \`CF_ACCOUNT_ID\`（可选）" >> $GITHUB_STEP_SUMMARY
+            echo "- \`DEEPSEEK_TOKEN\`（可选：不配也能用，前端把 token 填进提供商 API Key 即可）" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          if [ -z "$CF_ACCOUNT_ID" ]; then echo "::warning::CF_ACCOUNT_ID 缺失，使用内置默认值"; fi
+          if [ -z "$DS_TOKEN" ]; then
+            echo "::warning title=未配置 DEEPSEEK_TOKEN::Worker 会以「前端带 token」模式工作：请在前端把 DeepSeek 网页版 token 填进该提供商的 API Key。"
+          fi
+          echo "CF_API_TOKEN 长度: ${#CF_API_TOKEN}"
 
       - name: Install wrangler
         run: npm i -g wrangler@3
@@ -40,15 +64,35 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || 'b9865b22dc4d64174713371c293e700f' }}
         run: |
+          set -o pipefail
           wrangler deploy --name deepseek-web 2>&1 | tee /tmp/deploy.log
-          # 不把 secret 打在日志里
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Worker 已部署" >> $GITHUB_STEP_SUMMARY
+          echo "部署日志末尾：" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 15 /tmp/deploy.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Set secret
+      - name: Set token secret (optional)
         working-directory: worker/deepseek
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || 'b9865b22dc4d64174713371c293e700f' }}
           DS_TOKEN: ${{ secrets.DEEPSEEK_TOKEN }}
         run: |
-          if [ -z "$DS_TOKEN" ]; then echo "::warning::DEEPSEEK_TOKEN 未配置，跳过"; exit 0; fi
+          if [ -z "$DS_TOKEN" ]; then
+            echo "跳过：未配置 DEEPSEEK_TOKEN，改用前端携带 token 的方式"
+            echo "- ℹ️ 未配置 \`DEEPSEEK_TOKEN\`：请在前端把 token 填进「DeepSeek 网页版」的 API Key" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
           echo "$DS_TOKEN" | wrangler secret put DEEPSEEK_TOKENS --name deepseek-web
+          echo "- 🔑 已写入 \`DEEPSEEK_TOKENS\` secret" >> $GITHUB_STEP_SUMMARY
+
+      - name: Smoke check /health
+        run: |
+          sleep 5
+          echo "--- /health ---"
+          curl -sS -m 30 https://deepseek-web.yongjiu.ccwu.cc/health || echo "(健康检查请求失败，可能自定义域尚未生效或本机网络限制)"
+          echo ""
+          echo "--- /v1/models ---"
+          curl -sS -m 30 https://deepseek-web.yongjiu.ccwu.cc/v1/models || true

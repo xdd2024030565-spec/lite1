@@ -743,12 +743,16 @@ function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show')
 // ===== DeepSeek 网页版反代（内置，不可删除）=====
 // 走 Cloudflare Worker 反代 chat.deepseek.com；本模型只做纯对话，不参与工具调用。
 //
-// ⚠ token 不在这里 —— 它在 Worker 的 DEEPSEEK_TOKENS secret 里。
-//   Worker 只认 secret，前端带的 Authorization 头它根本不看（除非配了 PROXY_KEY）。
-//   所以换 token 请改 Worker，改本文件无效。详见 worker/deepseek/README.md。
-const DS_WEB_BASE='https://ai.yongjiu.ccwu.cc/dsweb/v1';
+// token 有两种放法：
+//   ① 推荐：放进 Worker 的 DEEPSEEK_TOKENS secret（前端不用填）
+//   ② 没配 secret 时：把网页版 token 填进下面这个提供商的「API Key」字段，
+//      Worker 会从 Authorization: Bearer <token> 取用 —— 改完即生效，不用重新部署
+// 获取 token：登录 chat.deepseek.com → 控制台执行
+//   JSON.parse(localStorage.getItem("userToken")).value
+// 详见 worker/deepseek/README.md。
+const DS_WEB_BASE='https://deepseek-web.yongjiu.ccwu.cc/v1';
 const DEFAULT_PROVIDERS=[
-  // key 留空：token 由 Worker 侧的 secret 提供，这里不需要也不应该填
+  // key 留空即可：token 优先由 Worker 的 secret 提供；若 Worker 未配 secret，在这里填网页版 token
   {id:'deepseek-web',name:'DeepSeek 网页版',base:DS_WEB_BASE,key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手',locked:true,noTools:true,selfProxied:true,badge:'反代'},
   {id:'sensenova',name:'商汤日日新',base:'https://token.sensenova.cn/v1',key:'',proxy:'',models:['sensenova-6.8-flash-lite','deepseek-v4-flash','deepseek-flash','glm-5.2','kimi-k3'],sys:'你是一个有用的 AI 助手'},
   {id:'deepseek',name:'DeepSeek',base:'https://api.deepseek.com/v1',key:'',proxy:'',models:['deepseek-chat','deepseek-reasoner'],sys:'你是一个有用的 AI 助手'},

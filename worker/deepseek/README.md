@@ -38,6 +38,59 @@ DeepSeek 官方 API（`api.deepseek.com`）要充值，而网页版 `chat.deepse
 **不支持 function calling**（工具调用）——网页版没有这个能力。
 前端 `ai.html` 已把该提供商标记为 `noTools: true`，不会下发工具定义。
 
+## ⚠️ 现状：这个 Worker 从未成功部署过（2026-10-31 查明）
+
+线上 `ai.yongjiu.ccwu.cc/dsweb/*` 与 `deepseek-web.yongjiu.ccwu.cc/*` 返回的都是
+`SHA3 worker test OK: function` —— 一个**测试桩**，不是本反代。仓库里没有任何文件会产生这个响应，
+说明线上跑的是更早手工部署的旧脚本。
+
+**为什么一直没更新**：`.github/workflows/deploy-deepseek.yml` 的 5 次运行**全部失败**，
+失败在第一步 `Check secrets` —— 仓库没配 `CF_API_TOKEN`，后面部署步骤全被跳过。
+
+### 让它真正可用，只差一步：配 CF_API_TOKEN
+
+仓库 Settings → Secrets and variables → Actions 添加：
+
+| Secret | 必填 | 说明 |
+|---|---|---|
+| `CF_API_TOKEN` | ✅ | Cloudflare API Token，权限需含 **Workers Scripts:Edit** |
+| `CF_ACCOUNT_ID` | 可选 | 不填用内置默认值 |
+| `DEEPSEEK_TOKEN` | 可选 | 网页版 token；**不填也能用**，见下 |
+
+配好后到 Actions 手动跑一次 `Deploy DeepSeek Web Worker`（或往 `worker/deepseek/**` 推一次提交），
+工作流最后会自动打 `/health` 与 `/v1/models` 做冒烟检查。
+
+### token 的两种放法（任选其一）
+
+1. **Worker secret**：配 `DEEPSEEK_TOKEN` 仓库 secret，部署时写入 Worker 的 `DEEPSEEK_TOKENS`。
+2. **前端携带**：不配 secret，在 `ai.html` 里把网页版 token 填进「DeepSeek 网页版」提供商的 **API Key**。
+   Worker 从 `Authorization: Bearer <token>` 取用 —— **改完即生效，不用重新部署**。
+
+访问 `https://deepseek-web.yongjiu.ccwu.cc/health` 可看到当前来源：
+
+```json
+{"status":"ok","service":"deepseek-web","runtime":"wasm-sha3","tokens":0,"tokenSource":"header",...}
+```
+
+`tokenSource` 取值：`secret` / `header` / `none`。
+
+## 2026-10-31 修复记录
+
+| 问题 | 说明 |
+|---|---|
+| **线上是测试桩** | 部署从未成功（缺 `CF_API_TOKEN`）。工作流改为失败时在 Summary 里给出可操作指引 |
+| **纯 JS SHA3 算的 PoW 被服务端拒绝** | 先前「纯 JS SHA3-256 替换 WASM」把 PoW 判定改坏了：服务端一律回 `40301 INVALID_POW_RESPONSE`。已**恢复官方 WASM（`wasm_solve`）**，并用真实 token 打真实 `chat.deepseek.com` 验证通过（非流式 + 流式 96 个 chunk） |
+| **`deepseek-web-final.js` 缺 3 个常量** | `DEFAULT_MODEL` / `DEEPSEEK_BASE` / `BROWSER_HEADERS` 被删但仍被引用，一跑就 `ReferenceError`（该文件是未纳入版本管理的半成品） |
+| **token 检查排在路由前面** | 没配 token 时连 `/v1/models` 都回 503、未知路径也回 503 而不是 404；已改为**先路由，只有 `/v1/chat/completions` 才要 token** |
+| **`wasmModule` 形态假设单一** | 现在同时兼容 Cloudflare 的 `WebAssembly.Module` 与 Node 的已实例化导出，便于本地直接测 |
+
+本地验证（不需要部署，直接调 worker 的 `fetch`）：
+
+```bash
+DS_TOKEN='<网页版 token>' node --experimental-wasm-modules _dsfinal.mjs
+# health / models / 非流式对话 / 流式对话 —— 6 项全过
+```
+
 ## 部署
 
 ```bash
@@ -47,23 +100,24 @@ cd worker/deepseek
 npx wrangler secret put DEEPSEEK_TOKENS
 #    多个 token 用英文逗号分隔，可做账号池轮询
 
-# 2. 可选：本代理的访问口令（不设则任何拿到域名的人都能调用）
+# 2. 可选：本代理的访问口令
 npx wrangler secret put PROXY_KEY
 
 # 3. 部署
 npx wrangler deploy
 ```
 
-部署后在 Cloudflare Dashboard 给这个 Worker 加自定义域路由：
+部署后在 Cloudflare Dashboard 加自定义域路由（两种都行）：
 
 ```
-ai.yongjiu.ccwu.cc/dsweb*  ->  deepseek-web（路径路由，复用已有子域，无需新 DNS）
+deepseek-web.yongjiu.ccwu.cc/*  ->  deepseek-web     # 独立子域，wrangler.toml 默认用它
+ai.yongjiu.ccwu.cc/dsweb*       ->  deepseek-web     # 路径路由，复用已有子域
 ```
 
-该域名必须和 `ai.html` 里的常量一致：
+域名必须和 `ai.html` 里的常量一致（目前指向前者）：
 
 ```js
-const DS_WEB_BASE = 'https://ai.yongjiu.ccwu.cc/dsweb/v1';
+const DS_WEB_BASE = 'https://deepseek-web.yongjiu.ccwu.cc/v1';
 ```
 
 ### 拿网页版 token

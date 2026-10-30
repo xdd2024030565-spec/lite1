@@ -1,8 +1,8 @@
-// ====== DeepSeek 网页版反向代理（Cloudflare Worker） ======
+// deepseek-web —— DeepSeek 网页版反代（Cloudflare Worker）
 // 把 chat.deepseek.com 的私有接口反代为 OpenAI 兼容接口，供前端 ai.html 直接调用。
 //
 // 核心能力：
-//   1. PoW 自动求解（DeepSeekHashV1，内嵌 sha3_wasm_bg.wasm，与官方前端同源算法）
+//   1. PoW 自动求解（DeepSeekHashV1，用官方 sha3_wasm_bg.wasm，与网页端同源算法）
 //   2. OpenAI 兼容：POST /v1/chat/completions、GET /v1/models
 //   3. SSE 流式转发：把 DeepSeek 的 event/data 流实时转成 OpenAI chunk 流
 //   4. 会话管理：一次对话复用同一个 chat_session，多轮上下文靠 prompt 拼接
@@ -16,7 +16,11 @@
 //   wrangler secret put PROXY_KEY           # 可选，本代理的访问口令
 //   wrangler deploy
 
-import wasmModule from './sha3_wasm_bg.wasm';
+
+import * as wasmNs from './sha3_wasm_bg.wasm';
+// Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
+// Node --experimental-wasm-modules：命名空间就是 wasm 的导出对象本身
+const wasmModule = (wasmNs && wasmNs.default) ? wasmNs.default : wasmNs;
 
 const DEEPSEEK_BASE = 'https://chat.deepseek.com';
 const DEFAULT_MODEL = 'deepseek-chat';
@@ -37,16 +41,24 @@ const BROWSER_HEADERS = {
   'x-client-bundle-id': 'com.deepseek.chat',
 };
 
-// ===== PoW 求解器（WASM 实例按 isolate 复用）=====
+// ===== PoW 求解器（官方 WASM，wasm_solve）=====
+// 说明：这里必须用官方 WASM。曾经改成「纯 JS SHA3 + 自己判定阈值」的实现，
+// 结果是服务端一律回 40301 INVALID_POW_RESPONSE —— 难点在于官方把 challenge 与
+// salt_expire_ 前缀分开传入、并在 WASM 内部按特定打包方式比较，外部无法可靠复刻。
+// WASM 由 wrangler 的 CompiledWasm 规则在**部署时**预编译，不涉及运行时编译，Workers 允许。
 let wasmPromise = null;
 function getWasm() {
   if (!wasmPromise) {
-    wasmPromise = WebAssembly.instantiate(wasmModule, {})
-      .then((r) => (r.instance || r).exports)
-      .catch((e) => {
-        wasmPromise = null; // 允许下次重试
-        throw e;
-      });
+    wasmPromise = (async () => {
+      // Cloudflare 的 CompiledWasm 规则给到的是 WebAssembly.Module（需实例化）；
+      // 某些运行时（如 Node 的 --experimental-wasm-modules）直接给已实例化的导出对象。
+      if (wasmModule && typeof wasmModule.wasm_solve === 'function') return wasmModule;
+      const r = await WebAssembly.instantiate(wasmModule, {});
+      return (r.instance || r).exports;
+    })().catch((e) => {
+      wasmPromise = null; // 允许下次重试
+      throw e;
+    });
   }
   return wasmPromise;
 }
@@ -63,10 +75,7 @@ async function solvePow(challenge) {
   const e = await getWasm();
   const stack = e.__wbindgen_add_to_stack_pointer(-16);
   const [chalPtr, chalLen] = encodeInto(e, challenge.challenge);
-  const [prePtr, preLen] = encodeInto(
-    e,
-    challenge.salt + '_' + challenge.expire_at + '_'
-  );
+  const [prePtr, preLen] = encodeInto(e, challenge.salt + '_' + challenge.expire_at + '_');
   try {
     e.wasm_solve(stack, chalPtr, chalLen, prePtr, preLen, challenge.difficulty);
     const view = new DataView(e.memory.buffer);
@@ -179,7 +188,7 @@ function buildPrompt(messages, systemPrompt) {
 //   1. 快照：{"v":{"response":{"fragments":[{"id":2,"type":"THINK","content":"We"}]}}}
 //      —— 每个新 fragment 开始时发一次，type 为 THINK（思考）或 RESPONSE（正文）
 //   2. 补丁：{"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
-//      —— `-1` 表示「追加一个新 fragment」，它开启下一段；"0"/"1" 表示续写已有段
+//      —— "-1" 表示「追加一个新 fragment」，它开启下一段；"0"/"1" 表示续写已有段
 //   3. 碎片：{"v":" answer"}  —— 追加到当前段
 // 注意：思考模式下会先来 THINK 段，再来 RESPONSE 段；若始终复用同一个 current，
 // 正文会被混进思考里、RESPONSE 为空（曾实测到 content="" 的 bug）。
@@ -296,35 +305,45 @@ function jsonResp(obj, status, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, '');
+    let path = url.pathname.replace(/\/+$/, '');
+    path = path.replace(/^\/dsweb/, '') || '/';
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
 
-    // 健康检查
+    // 健康检查：放在鉴权之前，方便排障
     if (path === '/health' || path === '') {
-      const tokens = loadTokens(env);
-      return jsonResp({ status: 'ok', tokens: tokens.length, model: DEFAULT_MODEL }, 200, env);
+      const tk = loadTokens(env);
+      const hdr = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      const pk = env && env.PROXY_KEY;
+      const headerIsToken = !!hdr && (!pk || hdr !== pk);
+      return jsonResp(
+        {
+          status: 'ok',
+          service: 'deepseek-web',
+          runtime: 'wasm-sha3',
+          tokens: tk.length,
+          tokenSource: tk.length ? 'secret' : headerIsToken ? 'header' : 'none',
+          proxyKeyRequired: !!pk,
+          model: DEFAULT_MODEL,
+        },
+        200,
+        env
+      );
     }
 
     // 访问口令校验（设置了 PROXY_KEY 才启用）
     const auth = request.headers.get('Authorization') || '';
     const clientKey = auth.replace(/^Bearer\s+/i, '').trim();
-    if (env && env.PROXY_KEY && clientKey !== env.PROXY_KEY) {
+    const proxyKey = env && env.PROXY_KEY;
+    if (proxyKey && clientKey !== proxyKey) {
       return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env);
     }
 
-    const tokens = loadTokens(env);
-    if (!tokens.length) {
-      return jsonResp(
-        { error: { message: '未配置 DEEPSEEK_TOKENS，请先 wrangler secret put DEEPSEEK_TOKENS', type: 'config' } },
-        503,
-        env
-      );
-    }
-
-    // 模型列表
+    // 模型列表：纯静态数据，不需要 token。
+    // （以前 token 检查排在路由前面，导致没配 token 时连 /v1/models 都返回 503，
+    //   前端和 OpenAI SDK 探活时会误判成「服务不可用」。）
     if (path === '/v1/models' || path === '/models') {
       return jsonResp(
         {
@@ -339,8 +358,28 @@ export default {
       );
     }
 
-    // 对话
+    // 对话：只有这条路径需要 token
     if (path === '/v1/chat/completions' || path === '/chat/completions') {
+      // token 有两个来源，按优先级取：
+      //   1) Worker secret DEEPSEEK_TOKENS —— 推荐，token 不落到浏览器
+      //   2) 请求头 Authorization: Bearer <网页版 token> —— 没配 secret 时兜底，
+      //      在前端把 token 填进该提供商的「API Key」即可直接用，不必重新部署
+      let tokens = loadTokens(env);
+      if (!tokens.length && clientKey && !proxyKey) tokens = [clientKey];
+      if (!tokens.length) {
+        return jsonResp(
+          {
+            error: {
+              message:
+                '未配置 DeepSeek token。两种方式任选：① wrangler secret put DEEPSEEK_TOKENS；' +
+                '② 在前端把网页版 token 填进「DeepSeek 网页版」提供商的 API Key 字段。',
+              type: 'config',
+            },
+          },
+          503,
+          env
+        );
+      }
       return handleChat(request, env, tokens);
     }
 
