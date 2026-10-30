@@ -7,10 +7,13 @@ binding = "VAULT_KV"
 id = "dadc5158a42140c2a1c210a9ee28ccec"
 
 [vars]
-# 多来源白名单（英文逗号分隔，不要结尾斜杠）。
-# 帽子云预览域名形如 https://lite1-xxxxxxxx.maozi.io，若域名会变，
-# 可在此加入；或改用 * 放宽（不推荐，会允许任意站点读写你的备忘录）。
-ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io"
+# 允许跨域读写的前端来源（英文逗号分隔，精确匹配，不要结尾斜杠）。
+# 漏掉某个来源，该站点在浏览器里就会出现「上传/拉取静默失败」（CORS 被拦，curl 测不出来）。
+#   nav.yongjiu.ccwu.cc        完整版自定义域
+#   lite1-3d8c30u.maozi.io     完整版帽子云
+#   lite-3d8c30u.maozi.io      兼容版帽子云
+#   xdd2024030565-spec.github.io  GitHub Pages
+ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://lite-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io"
 # SYNC_KEY 建议用 `wrangler secret put SYNC_KEY` 单独设置，不要写进 toml
 
 # 已配置自定义域路由（通过 Cloudflare Dashboard/API 添加）：
