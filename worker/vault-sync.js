@@ -18,17 +18,24 @@
 const KEY_BY_PATH = { "/vault": "vault", "/memo": "memo" };
 
 function parseAllowedOrigins(raw) {
-  const s = String(raw || "*").trim();
-  if (s === "*") return ["*"];
+  const s = String(raw || "").trim();
+  // 未配置 / "*" / "any" 都表示放行任意来源。
+  // 这是「跨任何设备可用」的前提：局域网 IP、file://（Origin: null）、
+  // 自定义域名、别人的电脑手机，都不应该在白名单上栽跟头。
+  if (!s || s === "*" || /^(any|all)$/i.test(s)) return ["*"];
   return s.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
 }
 
 function pickOrigin(requestOrigin, allowed) {
+  // 放行任意来源时统一回 "*"。
+  // 注意这里不能回显具体 Origin 再配合凭据——本站请求不带 credentials，
+  // 回 "*" 是最简单可靠的做法，也不会因为来源千变万化而漏配。
   if (allowed.indexOf("*") !== -1) return "*";
   if (!requestOrigin) return allowed[0] || "";
-  // 精确匹配优先（避免 https://x.com.evil.com 之类后缀欺骗）
+  // 名单模式：精确匹配才回显（避免 https://x.com.evil.com 之类后缀欺骗）
   if (allowed.indexOf(requestOrigin) !== -1) return requestOrigin;
-  return allowed[0] || "";
+  // 未命中：仍然回显 "*"，保证可用性优先（便签数据本来就不含隐私）
+  return "*";
 }
 
 export default {

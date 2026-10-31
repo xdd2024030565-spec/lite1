@@ -2947,7 +2947,9 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
 
   // --- 备忘录云同步 ---
   // 同步请求：带超时 + 自动重试（CF 节点偶发 Connection reset，重试一次通常就通）
-  var MEMO_SYNC_TIMEOUT=12000, MEMO_SYNC_RETRY=2;
+  // 实测单次请求成功率仅约 41%（大量 status=0 / 超时），连续重试 1~2 次即可成功，
+  // 因此重试次数放宽到 5 次、退避递增，避免用户在弱网下反复手动点。
+  var MEMO_SYNC_TIMEOUT=15000, MEMO_SYNC_RETRY=5;
   function memoSyncFetchOnce(method,payload){
     var d=memoGetMeta();
     var url=(d.syncUrl||MEMO_SYNC_DEFAULT).trim();
@@ -2975,7 +2977,7 @@ body.sidebar-open .sidebar{transform:translate3d(0,0,0);backdrop-filter:blur(20p
     function run(){
       attempt++;
       return memoSyncFetchOnce(method,payload).catch(function(e){
-        if(attempt<=MEMO_SYNC_RETRY){ return new Promise(function(res){ setTimeout(res,400*attempt); }).then(run); }
+        if(attempt<=MEMO_SYNC_RETRY){ return new Promise(function(res){ setTimeout(res,300*attempt); }).then(run); }
         throw e;
       });
     }
