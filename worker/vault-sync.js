@@ -48,6 +48,8 @@ export default {
       "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Max-Age": "86400",
+      // 暴露 cf-ray，前端才能读到当前 Cloudflare 边缘节点（如 ...-AMS）
+      "Access-Control-Expose-Headers": "cf-ray",
       "Vary": "Origin"
     };
 
@@ -58,6 +60,19 @@ export default {
     const url = new URL(request.url);
     let path = url.pathname;
     if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+
+    // 节点探测：给悬浮球用。返回当前边缘节点（cf-ray 尾部的机场码）。
+    // 用响应体传而不是只靠响应头，是因为跨域时浏览器只放行少数安全响应头，
+    // cf-ray 默认读不到。
+    if (path === "/cfnode" || path === "/health") {
+      const colo = (request.cf && request.cf.colo) || "";
+      const ray = request.headers.get("cf-ray") || "";
+      return jsonResp(
+        { ok: true, colo: colo || null, ray: ray || null, ts: Date.now() },
+        200,
+        corsHeaders
+      );
+    }
 
     let kvKey = null;
     let needAuth = true;
