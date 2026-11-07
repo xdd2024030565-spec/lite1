@@ -38,18 +38,44 @@ DeepSeek 官方 API（`api.deepseek.com`）要充值，而网页版 `chat.deepse
 **不支持 function calling**（工具调用）——网页版没有这个能力。
 前端 `ai.html` 已把该提供商标记为 `noTools: true`，不会下发工具定义。
 
-## ⚠️ 现状：这个 Worker 从未成功部署过（2026-10-31 查明）
+## ✅ 现状：已成功部署并验证（2026-11-07）
 
-线上 `ai.yongjiu.ccwu.cc/dsweb/*` 与 `deepseek-web.yongjiu.ccwu.cc/*` 返回的都是
-`SHA3 worker test OK: function` —— 一个**测试桩**，不是本反代。仓库里没有任何文件会产生这个响应，
-说明线上跑的是更早手工部署的旧脚本。
+线上 `https://deepseek-web.yongjiu.ccwu.cc` 跑的就是本仓库的 `deepseek-web.js`：
 
-**为什么一直没更新**：`.github/workflows/deploy-deepseek.yml` 的 5 次运行**全部失败**，
-失败在第一步 `Check secrets` —— 仓库没配 `CF_API_TOKEN`，后面部署步骤全被跳过。
+```json
+{"status":"ok","service":"deepseek-web","runtime":"wasm-sha3","tokens":1,"tokenSource":"secret","model":"deepseek-chat"}
+```
 
-### 让它真正可用，只差一步：配 CF_API_TOKEN
+已验证通过的项目：
 
-仓库 Settings → Secrets and variables → Actions 添加：
+| 项目 | 结果 |
+|---|---|
+| 非流式对话 | `1+1` → 正常返回 `2` |
+| 流式对话（SSE） | 正常分块推送 |
+| **联网搜索**（`search_enabled: true`） | 返回实时天气并带 `[citation:N]` 引用，证实上游确实检索了网页 |
+| 搜索关闭对照 | 模型答「无法提供实时天气」——开关确实起作用 |
+| CORS 预检 | 回 `access-control-allow-origin`，`lite1-3d8c30u.maozi.io` 等白名单来源可直连 |
+
+### 历史问题（已解决）
+
+此前部署从未成功，根因是仓库没配 `CF_API_TOKEN`，`.github/workflows/deploy-deepseek.yml`
+在第一步 `Check secrets` 就退出（5 次运行全部失败），线上一直是更早手工部署的测试桩
+（返回 `SHA3 worker test OK: function`）。2026-11-07 改用 REST API 直接部署后已恢复正常。
+
+### 两种部署方式
+
+**A. 本机直接跑 REST API（推荐，不依赖 wrangler）**
+
+```bash
+cd worker/deepseek
+CF_TOKEN=<Cloudflare API Token，需 Workers Scripts:Edit> \
+DS_TOKEN=<DeepSeek 网页版 token> \
+node deploy-api.mjs
+```
+
+脚本只依赖 Node 标准库，上传 `deepseek-web.js` + `sha3_wasm_bg.wasm` 并写入 `DEEPSEEK_TOKENS` secret。
+
+**B. GitHub Actions**（仓库 Settings → Secrets and variables → Actions 添加）：
 
 | Secret | 必填 | 说明 |
 |---|---|---|
