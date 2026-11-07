@@ -66,6 +66,18 @@
 - **token 在 Worker 的 secret 里，不在前端**。换 token 只改 `DEEPSEEK_TOKENS`，改 `ai.html` 无效
 - token 本身无有效期，只要不在网页版退出登录 / 改密码 / 被官方吊销就一直可用
 
+### 联网搜索开关（2026-11-07）
+
+对话页输入框上方常驻一个「联网搜索 开/关」按钮，只在使用内置「DeepSeek 网页版」时出现
+（其它 OpenAI 兼容接口没有 `search_enabled` 这个字段，故对该类提供商隐藏）。
+
+- **开启时**：请求体带 `search_enabled: true`，Worker 原样转发给 `chat.deepseek.com`，
+  模型会先检索网页再作答；关闭时回到纯对话。
+- **前端只负责传参**，检索由上游网页版完成；Worker 侧无需改动（`worker/deepseek/deepseek-web.js`
+  与 `-rt` 版本早已支持 `body.search_enabled`，也可由环境变量 `SEARCH=enabled` 全局强制开启）。
+- 状态存在 `settings.webSearch`，与温度等设置一起持久化；设置页「生成」页签也有同名开关，
+  两者改的是同一个值。
+
 ```bash
 cd worker/deepseek
 npx wrangler secret put DEEPSEEK_TOKENS   # 网页版 token，多个用逗号分隔
