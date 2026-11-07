@@ -94,6 +94,20 @@
 - **会话隔离**：前端会带 `conversation_scope`（本设备随机 id），Worker 按 `token + scope` 分会话池，
   避免 lite / lite1 / 多个标签页的上下文互相污染
 
+### 选择固定对话（2026-11-07）
+
+网页版模型下点「＋ 新对话」先弹出会话列表（`GET /v1/sessions`，取该账号最近 50 条，
+带 `[DSH#xxx]` 标记的会高亮为「固定」）。选中后可：
+
+- **导入最近 N 条作上下文**（`GET /v1/sessions/messages?id=…&limit=N`，默认 5、上限 20），
+  只取 `RESPONSE` 片段作正文、`THINK` 单独放 `reasoning`，不会把思考混进黑历史；
+- **该对话绑定这个上游会话**：之后每条消息都带 `pinned_session_id`，Worker 无条件钉死它，
+  消息写回同一个网页版对话（实测会话数不变、新消息确实落进去）；
+- 更早的聊天仍只存在浏览器本地，不会动上游记录。
+
+注意 `pinned_session_id` 是**绑定**语义，即使没开「单次对话」也会生效——否则用户选的
+对话根本没被写入。
+
 ```bash
 cd worker/deepseek
 npx wrangler secret put DEEPSEEK_TOKENS   # 网页版 token，多个用逗号分隔

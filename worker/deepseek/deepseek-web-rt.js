@@ -170,10 +170,13 @@ async function acquireSession(token, opts) {
   let s = sessionPool.get(key);
   const ctx = opts && opts.ctx;
 
-  if (persistent) {
-    const pin = (opts && opts.pin) || '';
-    if (pin) return { id: pin, lastUsed: now };
+  // 前端指定了固定会话（用户在「新建对话」里选了某个上游会话）：
+  // 这是**绑定**语义，必须无条件生效——不能因为用户没开“单次对话”就失效，
+  // 否则新消息会落到别的会话里，用户选的那个对话根本没被写入。
+  const pin = String((opts && opts.pin) || '').trim();
+  if (pin) return { id: pin, lastUsed: now, needMark: false };
 
+  if (persistent) {
     const c = persistCache.get(key);
     if (c && now - c.at < 10 * 60 * 1000 && s && s.id === c.sid) {
       s.lastUsed = now;
@@ -257,6 +260,18 @@ function makeUpstreamCtx(token) {
       if (j.code !== 0) throw new Error('建会话失败: ' + JSON.stringify(j).slice(0, 200));
       const biz = j.data.biz_data;
       return biz.id || (biz.chat_session && biz.chat_session.id);
+    },
+    async historyMessages(sessionId) {
+      if (!sessionId) return [];
+      try {
+        const pow = await this.pow();
+        const r = await fetch(
+          DEEPSEEK_BASE + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(sessionId),
+          { method: 'GET', headers: authHeaders(token, { 'X-DS-PoW-Response': pow }) }
+        );
+        const j = await r.json();
+        return (j && j.data && j.data.biz_data && j.data.biz_data.chat_messages) || [];
+      } catch (e) { return []; }
     },
     async lastAssistantId(sessionId) {
       if (!sessionId) return null;
@@ -537,6 +552,72 @@ export default {
     }
 
     // 对话
+    // ===== 固定对话选择：列出上游会话 =====
+    // 用途：前端「新建对话」时可选「绑定到某个已存在的网页版会话」，
+    // 只拉取该会话最近若干轮作为上下文，之后的对话仍留在浏览器本地。
+    if (path === '/v1/sessions') {
+      const tokens = loadTokens(env);
+      const token = tokens[0];
+      if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
+      try {
+        const ctx = makeUpstreamCtx(token);
+        const list = await ctx.listSessions();
+        const items = list.slice(0, 50).map(function (it) {
+          return {
+            id: it.id,
+            title: it.title || '(无标题)',
+            pinned: !!it.pinned,
+            updated_at: it.updated_at || 0,
+            // 带 [DSH#xxx] 标记的是本服务给固定会话贴的标记，前端可高亮
+            tagged: typeof it.title === 'string' && it.title.indexOf('[DSH#') >= 0,
+          };
+        });
+        return jsonResp({ object: 'list', data: items }, 200, env, request);
+      } catch (e) {
+        return jsonResp({ error: { message: '拉取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
+      }
+    }
+
+    // ===== 固定对话选择：读取某个会话的消息（供导入前几条）=====
+    // query: id=会话id&limit=N（默认 5，最多 20）
+    if (path === '/v1/sessions/messages') {
+      const tokens = loadTokens(env);
+      const token = tokens[0];
+      if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
+      const sid = url.searchParams.get('id') || '';
+      if (!sid) return jsonResp({ error: { message: '缺少 id' } }, 400, env, request);
+      let limit = parseInt(url.searchParams.get('limit') || '5', 10);
+      if (isNaN(limit) || limit <= 0) limit = 5;
+      if (limit > 20) limit = 20;
+      try {
+        const ctx = makeUpstreamCtx(token);
+        const msgs = await ctx.historyMessages(sid);
+        // 只取最近 limit 条，且过滤 TIP / 系统提示等非对话片段
+        const picked = [];
+        for (let i = msgs.length - 1; i >= 0 && picked.length < limit; i--) {
+          const m = msgs[i];
+          if (!m) continue;
+          const role = m.role === 'USER' ? 'user' : m.role === 'ASSISTANT' ? 'assistant' : null;
+          if (!role) continue;
+          // 只取 RESPONSE 片段作为正文；THINK 是思考过程，混进正文会污染导入内容
+          const frags = m.fragments || [];
+          const resp = frags.filter(function (f) { return f && f.type === 'RESPONSE'; })
+            .map(function (f) { return f.content || ''; }).join('').trim();
+          const think = frags.filter(function (f) { return f && f.type === 'THINK'; })
+            .map(function (f) { return f.content || ''; }).join('').trim();
+          // 老数据可能没有 RESPONSE 类型，退化取所有非 TIP 片段
+          const text = resp || (frags.filter(function (f) {
+            return f && f.type !== 'TIP' && f.type !== 'THINK' && typeof f.content === 'string';
+          }).map(function (f) { return f.content; }).join('').trim());
+          if (!text) continue;
+          picked.unshift({ role: role, content: text, reasoning: think || undefined, message_id: m.message_id });
+        }
+        return jsonResp({ id: sid, count: picked.length, messages: picked }, 200, env, request);
+      } catch (e) {
+        return jsonResp({ error: { message: '读取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
+      }
+    }
+
     if (path === '/v1/chat/completions' || path === '/chat/completions') {
       return handleChat(request, env, tokens);
     }
@@ -588,10 +669,14 @@ async function handleChat(request, env, tokens) {
       const sess = await acquireSession(token, { persistent: needStable, scope, pin, ctx });
       const sid = sess.id;
       const needMark = !!sess.needMark;
-      // 增量模式的 parent 必须持久：直接从上游历史读最后一条 ASSISTANT 的 message_id
+      // 增量模式的 parent 必须持久：直接从上游历史读最后一条 ASSISTANT 的 message_id。
+      // 绑定固定会话（pin）时也必须读：往已存在的会话追加消息要挂到它最后一条上，
+      // 否则上游会把它当成孤立消息，甚至落到别的会话里。
       let parentId = null;
-      if (incremental) {
+      if (incremental || pin) {
         parentId = await ctx.lastAssistantId(sid);
+      }
+      if (incremental) {
         prompt = buildPrompt(buildIncrementalMessages(messages, parentId != null), body.system);
       }
       // 复用 ctx 已经解出的 PoW（target_path 相同，可直接用），省掉一次 WASM 计算

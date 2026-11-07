@@ -653,6 +653,25 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
     </div>
   </div>
 </div>
+<!-- 选择固定对话浮层：列出 DeepSeek 网页版里已存在的会话，可导入最近若干条 -->
+<div class="mp-mask" id="sessMask">
+  <div class="mp" id="sessPicker" role="dialog" aria-label="选择固定对话">
+    <div class="mp-head">
+      <input id="sessSearch" placeholder="搜索会话标题…" autocomplete="off">
+    </div>
+    <div class="mp-body" id="sessBody"></div>
+    <div class="mp-foot">
+      <label class="hint" style="margin:0;display:flex;align-items:center;gap:6px">
+        导入最近 <input id="sessLimit" type="number" min="0" max="20" value="5"
+        style="width:52px;padding:3px 6px;margin:0"> 条上下文
+      </label>
+      <span class="sp"></span>
+      <button class="btn small" id="sessCancel">取消</button>
+      <button class="btn small" id="sessNewPlain">普通新对话</button>
+    </div>
+    <div class="hint" id="sessHint" style="padding:0 12px 10px;margin:0"></div>
+  </div>
+</div>
 <script>
 // ====== API 网关选优层（多域名故障转移 + 快捷保留区） ======
 // 原理：并发探测多个网关域名，选最快可用者，覆盖 API_BASE/AUTH_API/SEARCH_API
@@ -1135,7 +1154,108 @@ function renderSessions(){
     activeSessionId=it.dataset.sid;persist();renderAll();
   });
 }
+// ===== 选择固定对话（仅内置 DeepSeek 网页版可用）=====
+// 背景：反代在上游维护了固定的 chat_session，其标题带 [DSH#xxxx] 标记。
+// 这里让用户挑一个已存在的网页版会话，导入它最近 N 条消息作为上下文；
+// 之后的新对话仍只存在浏览器本地，不会污染上游那个会话。
+let _sessList = [];
+function sessionPickerAvailable(){
+  const p=curProvider();
+  return !!(p&&p.webSearch);   // 只有内置网页版反代才有上游会话
+}
+function openSessionPicker(){
+  if(!sessionPickerAvailable()){toast('该功能仅内置 DeepSeek 网页版支持');return}
+  const m=$('sessMask'); if(!m)return;
+  m.classList.add('open');
+  const q=$('sessSearch'); if(q)q.value='';
+  const body=$('sessBody'); if(body)body.innerHTML='<div class="mp-empty">正在读取网页版会话…</div>';
+  const hint=$('sessHint'); if(hint)hint.textContent='';
+  loadSessions();
+}
+function closeSessionPicker(){const m=$('sessMask'); if(m)m.classList.remove('open');}
+async function loadSessions(){
+  try{
+    const p=curProvider();
+    const base=(p.base||'').replace(/\/+$/,'');
+    const r=await fetch(base+'/sessions');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    _sessList=(j&&j.data)||[];
+    renderSessionPicker();
+  }catch(e){
+    const body=$('sessBody');
+    if(body)body.innerHTML='<div class="mp-empty">读取失败：'+esc((e&&e.message)||e)+'<br>请确认网络与反代地址</div>';
+  }
+}
+function renderSessionPicker(){
+  const body=$('sessBody'); if(!body)return;
+  const q=((($('sessSearch')||{}).value)||'').trim().toLowerCase();
+  const list=_sessList.filter(function(it){
+    return !q||String(it.title||'').toLowerCase().indexOf(q)>=0;
+  });
+  if(!list.length){
+    body.innerHTML='<div class="mp-empty">'+(_sessList.length?'没有匹配的会话':'网页版里还没有会话')+'</div>';
+    return;
+  }
+  let h='';
+  list.forEach(function(it){
+    const d=it.updated_at?new Date(it.updated_at*1000):null;
+    const when=d?((d.getMonth()+1)+'-'+d.getDate()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)):'';
+    h+='<button class="mp-item" data-sid="'+esc(it.id)+'">'+
+       '<span class="mn">'+esc(it.title||'(无标题)')+(it.tagged?' <span class="k">固定</span>':'')+'</span>'+
+       '<span class="mk" style="font-size:11px;color:var(--fg-faint)">'+esc(when)+'</span></button>';
+  });
+  body.innerHTML=h;
+  body.querySelectorAll('.mp-item').forEach(function(btn){
+    btn.onclick=function(){ bindSession(btn.dataset.sid); };
+  });
+}
+// 绑定某个上游会话：新建本地对话，导入最近 N 条，并把 pin 记在会话上
+async function bindSession(sid){
+  const it=_sessList.find(function(x){return x.id===sid;});
+  let limit=parseInt((($('sessLimit')||{}).value),10);
+  if(isNaN(limit)||limit<0)limit=5;
+  if(limit>20)limit=20;
+  const s={id:uid(),title:(it&&it.title)||'固定对话',messages:[],created:Date.now(),
+           pinnedSessionId:sid};
+  sessions.push(s); activeSessionId=s.id; persist();
+  closeSessionPicker();
+  if(limit>0){
+    try{
+      const p=curProvider();
+      const base=(p.base||'').replace(/\/+$/,'');
+      const r=await fetch(base+'/sessions/messages?id='+encodeURIComponent(sid)+'&limit='+limit);
+      const j=await r.json();
+      const msgs=(j&&j.messages)||[];
+      msgs.forEach(function(m){
+        s.messages.push({role:m.role,content:m.content,reasoning:m.reasoning||'',_imported:true});
+      });
+      if(s.messages.length){
+        const first=s.messages.find(function(m){return m.role==='user';});
+        if(first&&first.content)s.title=(it&&it.title)||String(first.content).slice(0,16);
+      }
+      persist();renderAll();$('input').focus();
+      toast('已绑定「'+((it&&it.title)||'会话')+'」，导入 '+s.messages.length+' 条');
+    }catch(e){
+      persist();renderAll();
+      toast('会话已绑定，但导入失败：'+((e&&e.message)||e));
+    }
+  }else{
+    renderAll();$('input').focus();
+    toast('已绑定「'+((it&&it.title)||'会话')+'」（不导入历史）');
+  }
+}
+// 普通新建（不绑定）
+function newSessionPlain(){
+  closeSessionPicker();
+  newSessionCore();
+}
 function newSession(){
+  // 内置网页版：先让用户选择「是否绑定一个已存在的上游会话」
+  if(sessionPickerAvailable()){ openSessionPicker(); return; }
+  newSessionCore();
+}
+function newSessionCore(){
   // 已经有一个空对话时直接复用，避免连点 + NEW 堆出一串「新对话」
   const cur=curSession();
   if(cur&&(!cur.messages||!cur.messages.length)){
@@ -2455,6 +2575,9 @@ function applyWebFlags(body,p){
   if(settings.webSingleChat)body.single_chat=true;
   // 会话隔离：lite / lite1 / 多标签页互不污染上下文
   body.conversation_scope=webScopeId();
+  // 本对话绑定到某个上游会话时，钉死用它（优先于 scope 自动认领）
+  const s=curSession();
+  if(s&&s.pinnedSessionId)body.pinned_session_id=s.pinnedSessionId;
 }
 
 // ===== 非流式请求（供工具循环备用） =====
@@ -2867,6 +2990,10 @@ $('searchToggle').onclick=toggleWebSearch;
 $('incrementalToggle').onclick=toggleIncremental;
 $('singleChatToggle').onclick=toggleSingleChat;
 $('mpClose').onclick=closeModelPicker;
+$('sessCancel').onclick=closeSessionPicker;
+$('sessNewPlain').onclick=newSessionPlain;
+$('sessSearch').oninput=renderSessionPicker;
+$('sessMask').onclick=function(e){if(e.target===$('sessMask'))closeSessionPicker();};
 $('mpManage').onclick=function(){closeModelPicker();showSbView('models');openSidebar();};
 $('mpSearch').oninput=renderModelPicker;
 $('mpMask').onclick=function(e){if(e.target===$('mpMask'))closeModelPicker();};
