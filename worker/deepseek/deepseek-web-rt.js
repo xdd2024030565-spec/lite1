@@ -161,10 +161,35 @@ function poolKey(token, scope) {
 
 async function acquireSession(token, opts) {
   const now = Date.now();
+  // persistent=true（单次对话）：始终钉在同一个 chat_session 上，
+  // 让 chat.deepseek.com 里永远只有这一个对话，而不是越开越多。
   const persistent = !!(opts && opts.persistent);
   const key = poolKey(token, opts && opts.scope);
   let s = sessionPool.get(key);
-  const stale = s && !persistent && now - s.lastUsed > 30 * 60 * 1000;
+
+  if (persistent) {
+    // 内存缓存只在同一实例内有效（通常几百毫秒内连续请求能命中），
+    // 真正的锚点是上游会话列表，这样换实例、过很久都不会漂移。
+    const c = persistCache.get(key);
+    if (c && now - c.at < 5 * 60 * 1000 && s && s.id === c.id) {
+      s.lastUsed = now;
+      return s;
+    }
+    const existId = await findLatestSession(token);
+    if (existId) {
+      s = { id: existId, lastUsed: now, lastResponseId: s ? s.lastResponseId : null };
+      sessionPool.set(key, s);
+      persistCache.set(key, { id: existId, at: now });
+      return s;
+    }
+    // 列表为空（账号全新）时才真正新建
+    s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
+    sessionPool.set(key, s);
+    persistCache.set(key, { id: s.id, at: now });
+    return s;
+  }
+
+  const stale = s && now - s.lastUsed > 30 * 60 * 1000;
   // 会话 30 分钟过期（上游 ttl_seconds 为 259200，这里保守取 30 分钟）
   if (!s || stale) {
     s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
@@ -172,6 +197,47 @@ async function acquireSession(token, opts) {
   }
   s.lastUsed = now;
   return s;
+}
+
+// ===== 持久会话锚定（单次对话）=====
+// ⚠️ Cloudflare Workers 的模块级变量**不保证跨请求存活**：隔离环境下每个请求可能拿到
+// 全新实例，sessionPool 里的 Map 会凭空消失，于是每次请求都新建 chat_session，
+// 「单次对话」形同虚设（实测连发 4 次在上游造出 4 条对话）。
+// 因此真正的锚点不能放在内存里 —— 这里改用**上游自己的会话列表**：
+//   GET /api/v0/chat_session/fetch_page 返回该账号最近的全部会话，
+//   取最新的那条作为固定会话。上游持久，所以换实例也不会丢。
+// 内存里仍保留一份短期缓存，命中时省掉一次列表请求。
+const persistCache = new Map(); // key -> { id, at }
+
+async function findLatestSession(token) {
+  try {
+    const pow = await getPowHeaderFor(token, '/api/v0/chat_session/fetch_page');
+    const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/fetch_page', {
+      method: 'GET',
+      headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+    });
+    const j = await r.json();
+    const list = (j && j.data && j.data.biz_data && j.data.biz_data.chat_sessions) || [];
+    return list.length ? list[0].id : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 为任意 path 申请 PoW（fetch_page 与 completion 的 target_path 不同）
+async function getPowHeaderFor(token, targetPath) {
+  const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat/create_pow_challenge', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ target_path: targetPath }),
+  });
+  const text = await r.text();
+  let j;
+  try { j = JSON.parse(text); } catch (e) {
+    throw new Error('challenge 响应非 JSON: HTTP ' + r.status + ' ' + text.slice(0, 200));
+  }
+  if (j.code !== 0) throw new Error('challenge 失败: ' + JSON.stringify(j).slice(0, 300));
+  return solvePow(j.data.biz_data.challenge);
 }
 
 // ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
@@ -211,86 +277,117 @@ function buildIncrementalMessages(messages, hasParent) {
 }
 
 // ===== 上游 SSE 解析 =====
-// DeepSeek 事件流的正文有三种形态（已用真实流量核对）：
-//   1. 快照：{"v":{"response":{"fragments":[{"id":2,"type":"THINK","content":"We"}]}}}
-//      —— 每个新 fragment 开始时发一次，type 为 THINK（思考）或 RESPONSE（正文）
-//   2. 补丁：{"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
-//      —— `-1` 表示「追加一个新 fragment」，它开启下一段；"0"/"1" 表示续写已有段
-//   3. 碎片：{"v":" answer"}  —— 追加到当前段
-// 注意：思考模式下会先来 THINK 段，再来 RESPONSE 段；若始终复用同一个 current，
-// 正文会被混进思考里、RESPONSE 为空（曾实测到 content="" 的 bug）。
+// 上游事件流（已用真实抓包核对，/tmp/raw_think.txt）：
+//
+//   形态1 快照  {"v":{"response":{"fragments":[{id:2,type:"THINK",content:"我们需要"}]}}}
+//   形态2a 数组 {"p":"response/fragments","v":[{id:2,type:"THINK",content:"我们需要回答中文..."},
+//                                              {id:3,type:"RESPONSE",content:"量子"},
+//                                              {id:4,type:"TIP",content:"This response is AI-generated"}]}
+//   形态2b 追加 {"p":"response/fragments/-1/content","v":"回答"}
+//   形态3 碎片  {"v":"中文"}
+//
+// 两个致命细节（都踩过坑）：
+//   ① 数组补丁里的 content 是**该片段的累积全文**，不是增量，且一次会带回多个片段
+//      （THINK + RESPONSE + TIP）。只取 v[0] 会丢掉 RESPONSE，正文整段消失，
+//      表现为「正文全被包进思考里」。
+//   ② fragments/-1 指「当前最后一个片段」，是续写而非新建；类型必须沿用该片段。
+//
+// 因此解析器不再依赖"当前 fragment"的游标，而是**按类型分别记录累积内容**，
+// 每收到一次快照就把累积值与上次的值比对，只输出新增的尾巴。
+// THINK 归思考、RESPONSE 归正文，TIP 是页脚提示（丢弃）。
 function makeParser() {
-  let current = null; // { id, type, content }
+  let acc = { THINK: '', RESPONSE: '' }; // 各类型的累积全文
+  let lastFrags = [];                     // 上一次已知的 fragments（用于 2b 定位）
+
+  function reset() {
+    acc = { THINK: '', RESPONSE: '' };
+    lastFrags = [];
+  }
+
+  // 把一份完整的 fragments 列表与已记录的累积值对齐，产出增量
+  function sync(frags) {
+    const out = [];
+    let seqIdx = 0;
+    for (const f of frags || []) {
+      if (!f || typeof f !== 'object') continue;
+      const type = f.type === 'THINK' ? 'THINK' : f.type === 'RESPONSE' ? 'RESPONSE' : null;
+      const content = typeof f.content === 'string' ? f.content : '';
+      if (type) {
+        const prev = acc[type] || '';
+        // 累积内容：只取比上次多出来的部分
+        const inc = content.length >= prev.length ? content.slice(prev.length) : content;
+        if (content.length >= prev.length) acc[type] = content;
+        else acc[type] = content; // 上游重写（如重新生成），整体替换
+        if (inc) out.push({ type, append: inc, content: acc[type], seq: seqIdx++ });
+      }
+      // TIP 及其它类型：仅记录位置，不输出
+    }
+    lastFrags = frags || [];
+    return out;
+  }
 
   return function feed(eventName, data) {
     if (!data || typeof data !== 'object') return null;
     if (eventName === 'close') return null;
-    // 新消息开始：重置分段
-    if (eventName === 'ready') {
-      current = null;
-      return null;
-    }
-    // 协议层的其它事件（update_session 等）跳过
+    if (eventName === 'ready') { reset(); return null; }
     if (data.v === undefined && data.p === undefined) return null;
 
-    // --- 形态 1：快照（含 fragments 数组）---
-    //     fragments 里除了 THINK（思考）/ RESPONSE（正文），还可能有 TIP（页脚提示，
-    //     如「本回答由 AI 生成，仅供参考」）。TIP 既不是用户要的答案，也不是思考过程，
-    //     必须跳过，否则它会被当成正文输出（实测非流式只剩这句提示，正文丢失）。
+    // 形态1：完整快照 —— 可能一次带来全部片段，逐个求差
     if (data.v && typeof data.v === 'object' && data.v.response) {
-      const frags = data.v.response.fragments || [];
-      let out = null;
-      for (const f of frags) {
-        if (typeof f.content !== 'string') continue;
-        current = { id: f.id, type: f.type || 'RESPONSE', content: f.content };
-        if (f.type === 'TIP') continue;
-        out = { content: f.content, type: current.type, append: f.content };
-      }
-      return out;
+      const outs = sync(data.v.response.fragments || []);
+      return outs.length ? outs : null;
     }
 
-    // --- 形态 2：JSON Patch ---
     if (typeof data.p === 'string') {
-      // 2a. 追加整个 fragment 数组：{"p":"response/fragments","o":"APPEND","v":[{id,type,content}]}
-      //     思考模式下 THINK 段结束后，正文段就是这样出现的。务必先于下面判断。
+      // 形态2a：数组补丁 —— 内容可能整体是累积值，按类型求差即可
       if (/^response\/fragments$/.test(data.p)) {
-        const frag = Array.isArray(data.v) ? data.v[0] : data.v;
-        if (frag && typeof frag === 'object' && typeof frag.content === 'string') {
-          current = { id: frag.id, type: frag.type || 'RESPONSE', content: frag.content };
-          // TIP 是页脚提示，不属于答案也不属于思考，跳过；但 current 已更新，
-          // 后续裸碎片仍会落到正确的段上。
-          if (frag.type === 'TIP') return null;
-          return { content: frag.content, type: current.type, append: frag.content };
+        const arr = Array.isArray(data.v) ? data.v : (data.v ? [data.v] : []);
+        const outs = sync(arr);
+        return outs.length ? outs : null;
+      }
+
+      // 形态2b：fragments/<idx>/content —— 往某个片段追加文本
+      const m2 = data.p.match(/fragments\/(-?\d+)\/content$/);
+      if (m2 && typeof data.v === 'string') {
+        // -1 = 当前最后一个片段；否则按索引取
+        let frag = null;
+        if (m2[1] === '-1') frag = lastFrags.length ? lastFrags[lastFrags.length - 1] : null;
+        else {
+          const idx = parseInt(m2[1], 10);
+          frag = (idx >= 0 && lastFrags[idx]) ? lastFrags[idx] : null;
+          if (idx < 0) frag = lastFrags[lastFrags.length + idx] || null;
+        }
+        // 该补丁本身也可能携带该片段的累积值，交给 sync 求差最稳
+        const type = frag && frag.type === 'THINK' ? 'THINK'
+                   : frag && frag.type === 'RESPONSE' ? 'RESPONSE' : null;
+        if (type) {
+          const prev = acc[type] || '';
+          // data.v 若是累积全文，用它；否则当增量拼接
+          const looksCumulative = frag && typeof frag.content === 'string'
+            && data.v.length > 0 && frag.content.endsWith(data.v) && data.v.length >= prev.length;
+          const next = looksCumulative ? data.v : prev + data.v;
+          const inc = next.length >= prev.length ? next.slice(prev.length) : next;
+          acc[type] = next;
+          if (frag) frag.content = next;
+          if (inc) return [{ type, append: inc, content: next, seq: 0 }];
+          return null;
         }
         return null;
       }
-      // 2b. 段内文本补丁：{"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
-      //     ⚠️ "-1" 指的是**当前最后一个 fragment**（fragments[-1]），不是「新建一段」。
-      //     它的 type 必须沿用 current 的 type —— 思考段的后续碎片正是这样追加的。
-      //     曾把 -1 当成新建 RESPONSE 段，导致 THINK 段一旦被追加就"变成"正文：
-      //     思考只剩快照里的头几个字，后面整段思考全混进 content（2026-11-07 实测复现）。
-      const m = data.p.match(/fragments\/(-?\d+)\/content$/);
-      if (m && typeof data.v === 'string') {
-        if (m[1] === '-1') {
-          if (!current) current = { id: null, type: 'RESPONSE', content: '' };
-          current.content += data.v;
-          return { content: current.content, type: current.type, append: data.v };
-        }
-        if (!current) current = { id: m[1], type: 'RESPONSE', content: '' };
-        current.content += data.v;
-        return { content: current.content, type: current.type, append: data.v };
-      }
-      return null; // 其它 patch（elapsed_secs 等）忽略
+      return null;
     }
 
-    // --- 形态 3：裸碎片，追加到当前段 ---
+    // 形态3：裸碎片 —— 追加到"最后出现的非 TIP 片段"
     if (typeof data.v === 'string') {
-      if (!current) {
-        current = { id: null, type: 'RESPONSE', content: data.v };
-      } else {
-        current.content += data.v;
+      let target = null;
+      for (let i = lastFrags.length - 1; i >= 0; i--) {
+        const f = lastFrags[i];
+        if (f && (f.type === 'THINK' || f.type === 'RESPONSE')) { target = f; break; }
       }
-      return { content: current.content, type: current.type, append: data.v };
+      const type = target ? (target.type === 'THINK' ? 'THINK' : 'RESPONSE') : 'RESPONSE';
+      acc[type] = (acc[type] || '') + data.v;
+      if (target) target.content = acc[type];
+      return [{ type, append: data.v, content: acc[type], seq: 0 }];
     }
 
     return null;
@@ -515,10 +612,13 @@ async function aggregateResponse(upstream, model, env, thinking, onResponseId) {
     } catch (e) {
       continue;
     }
-    const delta = feed(eventName, data);
-    if (delta) {
-      if (delta.type === 'THINK') reasoning = delta.content;
-      else content = delta.content;
+    const parts = feed(eventName, data);
+    if (parts) {
+      for (const d of (Array.isArray(parts) ? parts : [parts])) {
+        if (!d || d.append === undefined) continue;
+        if (d.type === 'THINK') reasoning += d.append;
+        else content += d.append;
+      }
     }
   }
 
@@ -577,20 +677,18 @@ function streamResponse(upstream, model, env, thinking, onResponseId) {
             } catch (e) {
               continue;
             }
-            const d = feed(eventName, data);
-            if (!d) continue;
-            // 优先用解析器给出的增量；退化时按累积长度求差
-            const inc =
-              d.append !== undefined
-                ? d.append
-                : d.content.slice((d.type === 'THINK' ? sentReasoning : sentContent).length);
-            if (!inc) continue;
-            if (d.type === 'THINK') {
-              sentReasoning = d.content;
-              push(openaiChunk(id, model, { reasoning_content: inc }));
-            } else {
-              sentContent = d.content;
-              push(openaiChunk(id, model, { content: inc }));
+            const parts = feed(eventName, data);
+            if (!parts) continue;
+            for (const d of (Array.isArray(parts) ? parts : [parts])) {
+              if (!d || d.append === undefined || !d.append) continue;
+              const inc = d.append;
+              if (d.type === 'THINK') {
+                sentReasoning = d.content;
+                push(openaiChunk(id, model, { reasoning_content: inc }));
+              } else {
+                sentContent = d.content;
+                push(openaiChunk(id, model, { content: inc }));
+              }
             }
           }
         }
