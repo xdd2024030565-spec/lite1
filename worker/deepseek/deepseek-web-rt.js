@@ -161,112 +161,129 @@ function poolKey(token, scope) {
 
 async function acquireSession(token, opts) {
   const now = Date.now();
-  // persistent=true：需要稳定会话（单次对话，或增量模式需要 parent 有处可放）。
-  // 真正的锚点必须放在**上游**（Workers 模块级变量跨实例会丢）：
-  //   优先用前端传来的固定 session id（pin）；
-  //   否则找该账号的会话列表里「带本 scope 标记」的那条，没有就新建并打标记。
+  // persistent=true：需要稳定会话（单次对话，或增量模式要 parent 有处可放）
+  // 锚点必须放在上游（Workers 模块级变量跨实例会丢）：
+  //   ① 前端传来的固定 session id（pin） ② 会话列表里带本 scope 标记的那条
+  //   都没有就新建一条并打标记，之后一直用它，不会每轮增生。
   const persistent = !!(opts && opts.persistent);
   const key = poolKey(token, opts && opts.scope);
   let s = sessionPool.get(key);
+  const ctx = opts && opts.ctx;
 
   if (persistent) {
-    // 前端显式锚定：最可靠，跨实例也不漂
     const pin = (opts && opts.pin) || '';
     if (pin) return { id: pin, lastUsed: now };
 
     const c = persistCache.get(key);
-    if (c && now - c.at < 60 * 1000 && s && s.id === c.sid) {
+    if (c && now - c.at < 10 * 60 * 1000 && s && s.id === c.sid) {
       s.lastUsed = now;
       return s;
     }
+    // 一次列表查询同时完成「找标记」和「取最新」两件事，避免多花一次 PoW
     const marker = buildSessionMarker(opts && opts.scope);
-    const existing = await findByMarker(token, marker);
-    if (existing) {
-      s = { id: existing, lastUsed: now };
-      sessionPool.set(key, s);
-      persistCache.set(key, { sid: existing, at: now });
+    const list = ctx ? await ctx.listSessions() : [];
+    let found = null;
+    for (const it of list) {
+      if (it && typeof it.title === 'string' && it.title.indexOf(marker) >= 0) { found = it.id; break; }
+    }
+    if (found) {
+      s = { id: found, lastUsed: now };
+      sessionPool.set(key, s); persistCache.set(key, { sid: found, at: now });
       return s;
     }
-    // 没有带标记的会话：新建一条专属会话并打上标记，之后靠标记认领，
-    // 既不会跑到别人刚用过的对话里，也不会每轮新增。
-    const sid2 = await createSession(token);
-    await setSessionTitle(token, sid2, marker + ' 固定会话');
-    s = { id: sid2, lastUsed: now };
-    sessionPool.set(key, s);
-    persistCache.set(key, { sid: sid2, at: now });
+    // 还没有带标记的会话：直接复用最新那条（保证不额外增生）。
+    // ⚠️ 此时**不能**打标记：上游对空会话自增标题返回 biz_code=5
+    //    "empty chat session"，且空会话根本不在 fetch_page 列表里，
+    //    打完标记也查不到，于是每轮都会再新建一条（实测造出 15 条带标记的僵尸会话）。
+    //    正确做法是等这轮对话落库后再贴标记（见 markSessionIfNeeded）。
+    const base = list.length ? list[0].id : (ctx ? await ctx.createSession() : await createSession(token));
+    s = { id: base, lastUsed: now, needMark: true };
+    sessionPool.set(key, s); persistCache.set(key, { sid: base, at: now });
     return s;
   }
 
   const stale = s && now - s.lastUsed > 30 * 60 * 1000;
   if (!s || stale) {
-    s = { id: await createSession(token), lastUsed: now };
+    s = { id: ctx ? await ctx.createSession() : await createSession(token), lastUsed: now };
     sessionPool.set(key, s);
   }
   s.lastUsed = now;
   return s;
 }
 
-// ===== 持久态锚定（单次对话 / 增量模式）=====
-// ⚠️ Cloudflare Workers 的模块级变量**不保证跨请求存活**：隔离实例下每个请求可能拿到
-// 全新上下文，sessionPool / lastResponseId 都会凭空消失。实测后果：
-//   · 单次对话每次请求都新建 chat_session，上游对话越开越多；
-//   · 增量模式拿不到上一轮 parent，退化成每轮全量重发。
-// 因此真正的状态必须落到**上游自己**身上，那里是持久的：
-//   GET /api/v0/chat_session/fetch_page           → 最近的会话列表
-//   GET /api/v0/chat/history_messages?chat_session_id=X → 该会话的消息（含 message_id）
-// 每条 ASSISTANT 消息的 message_id 正是下一轮要用作 parent_message_id 的值。
-const persistCache = new Map(); // key -> { sid, at }  仅作短期加速
+const persistCache = new Map(); // key -> { sid, at } 仅作短期加速
 
-async function getPowHeaderFor(token, targetPath) {
-  const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat/create_pow_challenge', {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify({ target_path: targetPath }),
-  });
-  const text = await r.text();
-  let j;
-  try { j = JSON.parse(text); } catch (e) {
-    throw new Error('challenge 响应非 JSON: HTTP ' + r.status + ' ' + text.slice(0, 200));
-  }
-  if (j.code !== 0) throw new Error('challenge 失败: ' + JSON.stringify(j).slice(0, 300));
-  return solvePow(j.data.biz_data.challenge);
+// ===== 单次会话内的上游上下文（一次请求只付一次 PoW）=====
+// ⚠️ 性能红线：solvePow 跑 WASM，是 CPU 大头。早期版本一次请求里为了
+// 「查列表 / 查标记 / 查历史 / 发对话」各算一遍 PoW，累计 4 次，直接把
+// Workers 的 CPU 预算打爆 —— 线上表现为 Cloudflare error 1102，且**多次调用后
+// 才出现**（前一两次侥幸过关）。因此这里必须收敛：一个请求内只算 1~2 次 PoW。
+function makeUpstreamCtx(token) {
+  let powCache = null;   // 复用：同一次请求里 fetch_page / update_title 共用
+  return {
+    get powCacheValue() { return powCache; },
+    async pow(targetPath) {
+      if (powCache) return powCache;
+      powCache = await getPowHeader(token, targetPath || '/api/v0/chat/completion');
+      return powCache;
+    },
+    async listSessions() {
+      const pow = await this.pow();
+      const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/fetch_page', {
+        method: 'GET', headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+      });
+      const j = await r.json();
+      return (j && j.data && j.data.biz_data && j.data.biz_data.chat_sessions) || [];
+    },
+    async setTitle(sessionId, title) {
+      try {
+        const pow = await this.pow();
+        const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/update_title', {
+          method: 'POST',
+          headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+          body: JSON.stringify({ chat_session_id: sessionId, title }),
+        });
+        return r.ok;
+      } catch (e) { return false; }
+    },
+    async createSession() {
+      const pow = await this.pow();
+      const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/create', {
+        method: 'POST',
+        headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+        body: JSON.stringify({ target_path: '/api/v0/chat/completion' }),
+      });
+      const j = await r.json();
+      if (j.code !== 0) throw new Error('建会话失败: ' + JSON.stringify(j).slice(0, 200));
+      const biz = j.data.biz_data;
+      return biz.id || (biz.chat_session && biz.chat_session.id);
+    },
+    async lastAssistantId(sessionId) {
+      if (!sessionId) return null;
+      try {
+        const pow = await this.pow();
+        const r = await fetch(
+          DEEPSEEK_BASE + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(sessionId),
+          { method: 'GET', headers: authHeaders(token, { 'X-DS-PoW-Response': pow }) }
+        );
+        const j = await r.json();
+        const msgs = (j && j.data && j.data.biz_data && j.data.biz_data.chat_messages) || [];
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m && m.role === 'ASSISTANT' && m.message_id != null) return m.message_id;
+        }
+        return null;
+      } catch (e) { return null; }
+    },
+  };
 }
 
-// 取该账号最近的一个会话 id（单次对话用它当固定锚点）
-async function findLatestSession(token) {
-  try {
-    const pow = await getPowHeaderFor(token, '/api/v0/chat/completion');
-    const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/fetch_page', {
-      method: 'GET',
-      headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
-    });
-    const j = await r.json();
-    const list = (j && j.data && j.data.biz_data && j.data.biz_data.chat_sessions) || [];
-    return list.length ? list[0].id : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 取指定会话里最后一条 ASSISTANT 消息的 message_id（增量模式的 parent）
-async function findLastAssistantId(token, sessionId) {
-  if (!sessionId) return null;
-  try {
-    const pow = await getPowHeaderFor(token, '/api/v0/chat/completion');
-    const r = await fetch(
-      DEEPSEEK_BASE + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(sessionId),
-      { method: 'GET', headers: authHeaders(token, { 'X-DS-PoW-Response': pow }) }
-    );
-    const j = await r.json();
-    const msgs = (j && j.data && j.data.biz_data && j.data.biz_data.chat_messages) || [];
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i];
-      if (m && m.role === 'ASSISTANT' && m.message_id != null) return m.message_id;
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
+// 会话标记：把 scope 摘要成短串，写进上游会话标题，用于认领「本设备的固定会话」
+function buildSessionMarker(scope) {
+  const sc = String(scope || 'default');
+  let h = 0;
+  for (let i = 0; i < sc.length; i++) h = (h * 31 + sc.charCodeAt(i)) & 0xffff;
+  return '[DSH#' + h.toString(16) + ']';
 }
 
 // ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
@@ -566,14 +583,19 @@ async function handleChat(request, env, tokens) {
       const needStable = singleChat || incremental;
       const scope = (body && (body.conversation_scope || body.session_scope)) || '';
       const pin = String(body.chat_session_id || body.pinned_session_id || '').trim();
-      const sess = await acquireSession(token, { persistent: needStable, scope, pin });
+      // 一个请求内共用同一个 ctx：PoW 只算一次（否则会撞 Workers CPU 上限，返回 1102）
+      const ctx = makeUpstreamCtx(token);
+      const sess = await acquireSession(token, { persistent: needStable, scope, pin, ctx });
       const sid = sess.id;
+      const needMark = !!sess.needMark;
+      // 增量模式的 parent 必须持久：直接从上游历史读最后一条 ASSISTANT 的 message_id
       let parentId = null;
       if (incremental) {
-        parentId = await findLastAssistantId(token, sid);
+        parentId = await ctx.lastAssistantId(sid);
         prompt = buildPrompt(buildIncrementalMessages(messages, parentId != null), body.system);
       }
-      const pow = await getPowHeader(token);
+      // 复用 ctx 已经解出的 PoW（target_path 相同，可直接用），省掉一次 WASM 计算
+      const pow = ctx.powCacheValue || (await ctx.pow('/api/v0/chat/completion'));
       const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
         method: 'POST',
         headers: authHeaders(token, {
@@ -599,9 +621,16 @@ async function handleChat(request, env, tokens) {
         continue; // 换下一个账号
       }
 
-      const onResponseId = function (rid) {
-        if (rid) sess.lastResponseId = rid;
-      };
+      // 上游消息 id 由 history_messages 持久保存，这里不需要再写回内存
+      const onResponseId = null;
+      // 本轮落库后给会话贴上标记（订阅式，不阻塞响应）：
+      // 空会话改标题会被上游拒绝，必须等这条消息写进去之后再贴。
+      if (needMark) {
+        const mctx = makeUpstreamCtx(token);
+        const mark = buildSessionMarker(scope);
+        const doMark = () => mctx.setTitle(sid, mark + ' 固定会话').catch(() => {});
+        try { request.waitUntil(doMark()); } catch (e) { doMark(); }
+      }
       if (stream) return streamResponse(upstream, model, env, thinking, onResponseId);
       return await aggregateResponse(upstream, model, env, thinking, onResponseId);
     } catch (e) {
