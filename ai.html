@@ -745,6 +745,7 @@ function load(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):(f
 function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function $(id){return document.getElementById(id)}
+const __openState={};   // 思考块展开状态，整表重建后据此回填
 function esc(s){return String(s==null?'':s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
 let toastTimer=null;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
@@ -1176,12 +1177,26 @@ $('btnNew').onclick=newSession;$('btnNew2').onclick=newSession;
 $('btnExportChat').onclick=exportChat;
 
 // ===== 消息渲染 =====
+// 重建前记录各折叠块的展开状态；重建后回填，并监听用户后续操作
+function snapshotOpenState(el){
+  el.querySelectorAll('details.reasoning, details[data-think]').forEach(function(d){
+    const k=d.getAttribute('data-key'); if(k)__openState[k]=d.open;
+  });
+}
+function restoreOpenState(el){
+  el.querySelectorAll('details.reasoning, details[data-think]').forEach(function(d){
+    const k=d.getAttribute('data-key');
+    if(k&&__openState[k]===true)d.open=true;
+    if(k)d.addEventListener('toggle',function(){__openState[k]=d.open;});
+  });
+}
 function renderMsgs(){
   const s=curSession();const el=$('msgs');
   if(!el)return;
   if(!s){el.innerHTML='<div class="empty"><div class="big">&gt;_</div><h2>No active session</h2>配置提供商后开始对话 · <code>Enter</code> 发送<br><button class="btn primary" style="margin-top:14px" onclick="newSession()">+ NEW CHAT</button></div>';updateCtxBar();return}
   // 空会话：以前这里什么都不渲染，只留一大片空白；现在给一个明确的起点
   if(!s.messages.length){el.innerHTML=welcomeHtml();updateCtxBar();return}
+  snapshotOpenState(el);
   el.innerHTML=s.messages.map((m,__i)=>{
     if(m.role==='system')return '';
 
@@ -1199,7 +1214,7 @@ function renderMsgs(){
       return '<div class="msg"><div class="role">'+esc(m.role)+'</div><div class="bubble">'+calls+'</div></div>';
     }
     let reasoningHtml='';
-    if(m.reasoning){reasoningHtml='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>🤔 思考过程 ('+Math.round(m.reasoning.length/100)/10+'k 字)</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
+    if(m.reasoning){reasoningHtml='<details class="reasoning" data-key="r'+__i+'" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>🤔 思考过程 ('+Math.round(m.reasoning.length/100)/10+'k 字)</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
     const bubbleId=m._streaming?' id="streamBubble"':'';
     const noticeHtml=m._notice?'<div class="hint" style="color:var(--fg2);margin-bottom:6px">'+esc(m._notice)+'</div>':'';
     const errHtml=m._error?('<div class="hint" style="color:var(--danger);margin-top:8px">'+esc(m._errText||'')+'</div><div style="margin-top:8px"><button class="btn small" onclick="retryThis()">重试</button></div>'):'';
@@ -1212,7 +1227,12 @@ function renderMsgs(){
       '</div>');
     return '<div class="msg '+(isUser?'user':'')+'"><div class="role">'+(isUser?'你':'AI')+'</div><div class="bubble"'+bubbleId+'>'+noticeHtml+reasoningHtml+md(m.content||'')+(m._streaming?'<span class="typing-dot"><i></i><i></i><i></i></span>':'')+errHtml+'</div>'+acts+'</div>';
   }).join('');
+  // ===== 保持用户对「思考过程」折叠块的展开状态 =====
+  // renderMsgs 是 innerHTML 整表重建：新建的 <details> 默认收起，用户刚展开就会被
+  // 下一帧换成收起的新元素（表现为「展开立刻缩回」）。
+  // 做法：重建前后按「消息索引 + 块类型」记住 open，重建后回填，并监听用户操作。
   el.scrollTop=el.scrollHeight;
+  restoreOpenState(el);
   updateCtxBar();
 }
 
@@ -1421,10 +1441,53 @@ function patchStreamBubble(){
   if(!el||!st)return;
   const m=st.messages.find(x=>x.role==='assistant'&&x._streaming);
   if(!m)return;
-  let pre='';
-  if(m.reasoning){pre='<details class="reasoning" style="margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px"><summary>思考中…</summary><div style="white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto">'+esc(m.reasoning)+'</div></details>';}
-  const notice=m._notice?'<div class="hint" style="display:flex;align-items:center;gap:6px;color:var(--fg2);margin-bottom:6px">'+esc(m._notice)+'</div>':'';
-  el.innerHTML=notice+pre+md(m.content||'')+'<span class="typing-dot"><i></i><i></i><i></i></span>';
+
+  // ⚠️ 不能每帧 innerHTML 重建整个气泡：新建的 <details> 默认是收起的，
+  // 用户刚点开、下一帧又被换成新的收起状态，看上去就是「展开了立刻缩回」。
+  // 做法：思考块只建一次，之后只改文本节点，open 状态完全交给用户。
+  let det=el.querySelector('.reasoning.stream');
+  if(m.reasoning){
+    if(!det){
+      det=document.createElement('details');
+      det.className='reasoning stream';
+      det.setAttribute('data-key','stream');
+      det.open=true;                       // 首次出现默认展开，便于观察
+      det.style.cssText='margin-bottom:8px;font-size:12px;color:var(--fg2);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 10px';
+      const sm=document.createElement('summary');
+      sm.textContent='思考中…';
+      const dv=document.createElement('div');
+      dv.style.cssText='white-space:pre-wrap;margin-top:6px;max-height:300px;overflow-y:auto';
+      det.appendChild(sm);det.appendChild(dv);
+      el.insertBefore(det,el.firstChild);
+    }
+    const dv=det.querySelector('div');
+    const sm=det.querySelector('summary');
+    const txt=String(m.reasoning);
+    if(dv&&dv.textContent!==txt)dv.textContent=txt;
+    if(sm)sm.textContent='思考中…（'+txt.length+' 字）';
+    // 注意：这里绝不碰 det.open
+  }else if(det){
+    det.parentNode&&det.parentNode.removeChild(det);
+  }
+
+  // 正文：只更新正文容器，避免连思考块一起重建
+  let bodyEl=el.querySelector('.stream-body');
+  if(!bodyEl){
+    // 首次：清掉旧内容，建立稳定结构
+    el.innerHTML='';
+    bodyEl=document.createElement('div');
+    bodyEl.className='stream-body';
+    el.appendChild(bodyEl);
+  }
+  const html=md(m.content||'');
+  if(bodyEl.getAttribute('data-h')!==html){bodyEl.innerHTML=html;bodyEl.setAttribute('data-h',html);}
+  let dot=el.querySelector('.typing-dot');
+  if(!dot){
+    dot=document.createElement('span');
+    dot.className='typing-dot';
+    dot.innerHTML='<i></i><i></i><i></i>';
+    el.appendChild(dot);
+  }
   const box=document.getElementById('msgs');
   if(box)box.scrollTop=box.scrollHeight;
 }

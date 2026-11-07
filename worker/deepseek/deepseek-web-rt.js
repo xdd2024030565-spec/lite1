@@ -161,70 +161,62 @@ function poolKey(token, scope) {
 
 async function acquireSession(token, opts) {
   const now = Date.now();
-  // persistent=true（单次对话）：始终钉在同一个 chat_session 上，
-  // 让 chat.deepseek.com 里永远只有这一个对话，而不是越开越多。
+  // persistent=true：需要稳定会话（单次对话，或增量模式需要 parent 有处可放）。
+  // 真正的锚点必须放在**上游**（Workers 模块级变量跨实例会丢）：
+  //   优先用前端传来的固定 session id（pin）；
+  //   否则找该账号的会话列表里「带本 scope 标记」的那条，没有就新建并打标记。
   const persistent = !!(opts && opts.persistent);
   const key = poolKey(token, opts && opts.scope);
   let s = sessionPool.get(key);
 
   if (persistent) {
-    // 内存缓存只在同一实例内有效（通常几百毫秒内连续请求能命中），
-    // 真正的锚点是上游会话列表，这样换实例、过很久都不会漂移。
+    // 前端显式锚定：最可靠，跨实例也不漂
+    const pin = (opts && opts.pin) || '';
+    if (pin) return { id: pin, lastUsed: now };
+
     const c = persistCache.get(key);
-    if (c && now - c.at < 5 * 60 * 1000 && s && s.id === c.id) {
+    if (c && now - c.at < 60 * 1000 && s && s.id === c.sid) {
       s.lastUsed = now;
       return s;
     }
-    const existId = await findLatestSession(token);
-    if (existId) {
-      s = { id: existId, lastUsed: now, lastResponseId: s ? s.lastResponseId : null };
+    const marker = buildSessionMarker(opts && opts.scope);
+    const existing = await findByMarker(token, marker);
+    if (existing) {
+      s = { id: existing, lastUsed: now };
       sessionPool.set(key, s);
-      persistCache.set(key, { id: existId, at: now });
+      persistCache.set(key, { sid: existing, at: now });
       return s;
     }
-    // 列表为空（账号全新）时才真正新建
-    s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
+    // 没有带标记的会话：新建一条专属会话并打上标记，之后靠标记认领，
+    // 既不会跑到别人刚用过的对话里，也不会每轮新增。
+    const sid2 = await createSession(token);
+    await setSessionTitle(token, sid2, marker + ' 固定会话');
+    s = { id: sid2, lastUsed: now };
     sessionPool.set(key, s);
-    persistCache.set(key, { id: s.id, at: now });
+    persistCache.set(key, { sid: sid2, at: now });
     return s;
   }
 
   const stale = s && now - s.lastUsed > 30 * 60 * 1000;
-  // 会话 30 分钟过期（上游 ttl_seconds 为 259200，这里保守取 30 分钟）
   if (!s || stale) {
-    s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
+    s = { id: await createSession(token), lastUsed: now };
     sessionPool.set(key, s);
   }
   s.lastUsed = now;
   return s;
 }
 
-// ===== 持久会话锚定（单次对话）=====
-// ⚠️ Cloudflare Workers 的模块级变量**不保证跨请求存活**：隔离环境下每个请求可能拿到
-// 全新实例，sessionPool 里的 Map 会凭空消失，于是每次请求都新建 chat_session，
-// 「单次对话」形同虚设（实测连发 4 次在上游造出 4 条对话）。
-// 因此真正的锚点不能放在内存里 —— 这里改用**上游自己的会话列表**：
-//   GET /api/v0/chat_session/fetch_page 返回该账号最近的全部会话，
-//   取最新的那条作为固定会话。上游持久，所以换实例也不会丢。
-// 内存里仍保留一份短期缓存，命中时省掉一次列表请求。
-const persistCache = new Map(); // key -> { id, at }
+// ===== 持久态锚定（单次对话 / 增量模式）=====
+// ⚠️ Cloudflare Workers 的模块级变量**不保证跨请求存活**：隔离实例下每个请求可能拿到
+// 全新上下文，sessionPool / lastResponseId 都会凭空消失。实测后果：
+//   · 单次对话每次请求都新建 chat_session，上游对话越开越多；
+//   · 增量模式拿不到上一轮 parent，退化成每轮全量重发。
+// 因此真正的状态必须落到**上游自己**身上，那里是持久的：
+//   GET /api/v0/chat_session/fetch_page           → 最近的会话列表
+//   GET /api/v0/chat/history_messages?chat_session_id=X → 该会话的消息（含 message_id）
+// 每条 ASSISTANT 消息的 message_id 正是下一轮要用作 parent_message_id 的值。
+const persistCache = new Map(); // key -> { sid, at }  仅作短期加速
 
-async function findLatestSession(token) {
-  try {
-    const pow = await getPowHeaderFor(token, '/api/v0/chat_session/fetch_page');
-    const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/fetch_page', {
-      method: 'GET',
-      headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
-    });
-    const j = await r.json();
-    const list = (j && j.data && j.data.biz_data && j.data.biz_data.chat_sessions) || [];
-    return list.length ? list[0].id : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 为任意 path 申请 PoW（fetch_page 与 completion 的 target_path 不同）
 async function getPowHeaderFor(token, targetPath) {
   const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat/create_pow_challenge', {
     method: 'POST',
@@ -238,6 +230,43 @@ async function getPowHeaderFor(token, targetPath) {
   }
   if (j.code !== 0) throw new Error('challenge 失败: ' + JSON.stringify(j).slice(0, 300));
   return solvePow(j.data.biz_data.challenge);
+}
+
+// 取该账号最近的一个会话 id（单次对话用它当固定锚点）
+async function findLatestSession(token) {
+  try {
+    const pow = await getPowHeaderFor(token, '/api/v0/chat/completion');
+    const r = await fetch(DEEPSEEK_BASE + '/api/v0/chat_session/fetch_page', {
+      method: 'GET',
+      headers: authHeaders(token, { 'X-DS-PoW-Response': pow }),
+    });
+    const j = await r.json();
+    const list = (j && j.data && j.data.biz_data && j.data.biz_data.chat_sessions) || [];
+    return list.length ? list[0].id : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 取指定会话里最后一条 ASSISTANT 消息的 message_id（增量模式的 parent）
+async function findLastAssistantId(token, sessionId) {
+  if (!sessionId) return null;
+  try {
+    const pow = await getPowHeaderFor(token, '/api/v0/chat/completion');
+    const r = await fetch(
+      DEEPSEEK_BASE + '/api/v0/chat/history_messages?chat_session_id=' + encodeURIComponent(sessionId),
+      { method: 'GET', headers: authHeaders(token, { 'X-DS-PoW-Response': pow }) }
+    );
+    const j = await r.json();
+    const msgs = (j && j.data && j.data.biz_data && j.data.biz_data.chat_messages) || [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m && m.role === 'ASSISTANT' && m.message_id != null) return m.message_id;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
@@ -534,12 +563,15 @@ async function handleChat(request, env, tokens) {
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     try {
+      const needStable = singleChat || incremental;
       const scope = (body && (body.conversation_scope || body.session_scope)) || '';
-      const sess = await acquireSession(token, { persistent: singleChat, scope });
+      const pin = String(body.chat_session_id || body.pinned_session_id || '').trim();
+      const sess = await acquireSession(token, { persistent: needStable, scope, pin });
       const sid = sess.id;
-      const parentId = incremental ? sess.lastResponseId || null : null;
+      let parentId = null;
       if (incremental) {
-        prompt = buildPrompt(buildIncrementalMessages(messages, !!sess.lastResponseId), body.system);
+        parentId = await findLastAssistantId(token, sid);
+        prompt = buildPrompt(buildIncrementalMessages(messages, parentId != null), body.system);
       }
       const pow = await getPowHeader(token);
       const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
