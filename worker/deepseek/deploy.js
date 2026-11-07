@@ -148,19 +148,25 @@ function loadTokens(env) {
     .filter(Boolean);
 }
 
-// 每个 token 一个会话池，同一会话复用可保证多轮上下文
-const sessionPool = new Map(); // token -> { id, lastUsed, busy }
+// 会话池：key = token + 用途，value = { id, lastUsed, lastResponseId }
+const sessionPool = new Map();
 
-async function acquireSession(token) {
+function poolKey(token, scope) {
+  return String(token) + '|' + (scope ? String(scope).slice(0, 64) : '');
+}
+
+async function acquireSession(token, opts) {
   const now = Date.now();
-  let s = sessionPool.get(token);
-  // 会话 30 分钟过期（上游 ttl_seconds 为 259200，这里保守取 30 分钟）
-  if (!s || now - s.lastUsed > 30 * 60 * 1000) {
-    s = { id: await createSession(token), lastUsed: now };
-    sessionPool.set(token, s);
+  const persistent = !!(opts && opts.persistent);
+  const key = poolKey(token, opts && opts.scope);
+  let s = sessionPool.get(key);
+  const stale = s && !persistent && now - s.lastUsed > 30 * 60 * 1000;
+  if (!s || stale) {
+    s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
+    sessionPool.set(key, s);
   }
   s.lastUsed = now;
-  return s.id;
+  return s;
 }
 
 // ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
@@ -182,6 +188,20 @@ function buildPrompt(messages, systemPrompt) {
   }
   // 多轮时把历史压成一段，末尾是当前问题
   return parts.join('\n\n');
+}
+
+// ===== 增量模式：只发本轮，历史交给上游会话记忆 =====
+function buildIncrementalMessages(messages, hasParent) {
+  const list = Array.isArray(messages) ? messages : [];
+  if (!hasParent) return list;
+  const tail = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    if (!m || m.role !== 'user') break;
+    tail.unshift(m);
+  }
+  if (tail.length) return tail;
+  return list.length ? list.slice(-1) : list;
 }
 
 // ===== 上游 SSE 解析 =====
@@ -392,14 +412,23 @@ async function handleChat(request, env, tokens) {
     (env && env.THINKING === 'enabled');
   const search = body.search_enabled === true || (env && env.SEARCH === 'enabled');
 
-  const prompt = buildPrompt(messages, body.system);
+  // ===== 两个独立开关：增量模式 / 单次对话 =====
+  const incremental = body.incremental === true || (env && env.INCREMENTAL === 'enabled');
+  const singleChat = body.single_chat === true || (env && env.SINGLE_CHAT === 'enabled');
+
+  let prompt = buildPrompt(messages, body.system);
   let lastErr = null;
 
-  // 账号池轮询：任意一个 token 成功即可
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     try {
-      const sid = await acquireSession(token);
+      const scope = (body && (body.conversation_scope || body.session_scope)) || '';
+      const sess = await acquireSession(token, { persistent: singleChat, scope });
+      const sid = sess.id;
+      const parentId = incremental ? sess.lastResponseId || null : null;
+      if (incremental) {
+        prompt = buildPrompt(buildIncrementalMessages(messages, !!sess.lastResponseId), body.system);
+      }
       const pow = await getPowHeader(token);
       const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
         method: 'POST',
@@ -409,7 +438,7 @@ async function handleChat(request, env, tokens) {
         }),
         body: JSON.stringify({
           chat_session_id: sid,
-          parent_message_id: null,
+          parent_message_id: parentId,
           model_type: 'default',
           prompt,
           ref_file_ids: [],
@@ -426,12 +455,14 @@ async function handleChat(request, env, tokens) {
         continue; // 换下一个账号
       }
 
-      if (stream) return streamResponse(upstream, model, env, thinking);
-      return await aggregateResponse(upstream, model, env, thinking);
+      const onResponseId = function (rid) {
+        if (rid) sess.lastResponseId = rid;
+      };
+      if (stream) return streamResponse(upstream, model, env, thinking, onResponseId);
+      return await aggregateResponse(upstream, model, env, thinking, onResponseId);
     } catch (e) {
       lastErr = e;
-      // 会话可能失效，清掉让它重建
-      sessionPool.delete(token);
+      sessionPool.delete(poolKey(token, (body && (body.conversation_scope || body.session_scope)) || ''));
     }
   }
 
@@ -448,7 +479,7 @@ async function handleChat(request, env, tokens) {
 }
 
 // 非流式：把上游 SSE 聚合成一次性响应
-async function aggregateResponse(upstream, model, env, thinking) {
+async function aggregateResponse(upstream, model, env, thinking, onResponseId) {
   const text = await upstream.text();
   const feed = makeParser();
   let content = '';
@@ -493,7 +524,7 @@ async function aggregateResponse(upstream, model, env, thinking) {
 }
 
 // 流式：逐块转发 OpenAI chunk
-function streamResponse(upstream, model, env, thinking) {
+function streamResponse(upstream, model, env, thinking, onResponseId) {
   const id = randomId();
   const encoder = new TextEncoder();
   const feed = makeParser();

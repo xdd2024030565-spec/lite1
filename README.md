@@ -78,6 +78,22 @@
 - 状态存在 `settings.webSearch`，与温度等设置一起持久化；设置页「生成」页签也有同名开关，
   两者改的是同一个值。
 
+### 增量模式 / 单次对话（2026-11-07）
+
+对话页顶部还有两个**完全独立**的开关（都可单独开关，互不依赖，和联网搜索一样是各自的功能位）：
+
+| 开关 | 作用 | 实现 |
+|---|---|---|
+| **增量模式** | 不再每轮把整段历史拼进 prompt，只发本次输入 | Worker 只保留本轮 `user` 消息，用 `parent_message_id` 串到上一轮回答，上下文交给上游会话记忆 |
+| **单次对话** | `chat.deepseek.com` 里始终只有同一个对话 | Worker 在 `persistent` 模式下永不复用过期重建，钉死同一个 `chat_session` |
+
+两者组合后就是「像网页版正常聊天一样」：只发增量、由上游维持上下文，而不是反复重发全量。
+
+- 实测：开启增量后第 2 轮耗时从 ~3.5s 降到 ~1.5s，且 6 轮历史后仍能准确回答「一共记住了几个编号」
+- 请求体字段：`incremental: true` / `single_chat: true`（仅内置网页版提供商下发）
+- **会话隔离**：前端会带 `conversation_scope`（本设备随机 id），Worker 按 `token + scope` 分会话池，
+  避免 lite / lite1 / 多个标签页的上下文互相污染
+
 ```bash
 cd worker/deepseek
 npx wrangler secret put DEEPSEEK_TOKENS   # 网页版 token，多个用逗号分隔

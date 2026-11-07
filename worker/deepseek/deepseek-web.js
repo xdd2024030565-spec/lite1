@@ -147,19 +147,31 @@ function loadTokens(env) {
     .filter(Boolean);
 }
 
-// 每个 token 一个会话池，同一会话复用可保证多轮上下文
-const sessionPool = new Map(); // token -> { id, lastUsed, busy }
+// 会话池：key = token + 用途，value = { id, lastUsed, lastResponseId }
+// 用途（scope）很关键：增量模式靠 lastResponseId 串上下文，若 lite 与 lite1、
+// 或多个标签页共用一个 key，它们的对话会互相污染（A 的追问会接到 B 的上一轮）。
+// 前端会在请求里带 scope（一个本地随机 id），没带时退回按 token 共用一个。
+const sessionPool = new Map(); // key -> { id, lastUsed, lastResponseId }
 
-async function acquireSession(token) {
+function poolKey(token, scope) {
+  return String(token) + '|' + (scope ? String(scope).slice(0, 64) : '');
+}
+
+async function acquireSession(token, opts) {
   const now = Date.now();
-  let s = sessionPool.get(token);
+  // persistent=true（单次对话）：过期也不重建，始终钉在同一个 chat_session 上，
+  // 让 chat.deepseek.com 里永远只有这一个对话，而不是每次过期就新开一条。
+  const persistent = !!(opts && opts.persistent);
+  const key = poolKey(token, opts && opts.scope);
+  let s = sessionPool.get(key);
+  const stale = s && !persistent && now - s.lastUsed > 30 * 60 * 1000;
   // 会话 30 分钟过期（上游 ttl_seconds 为 259200，这里保守取 30 分钟）
-  if (!s || now - s.lastUsed > 30 * 60 * 1000) {
-    s = { id: await createSession(token), lastUsed: now };
-    sessionPool.set(token, s);
+  if (!s || stale) {
+    s = { id: await createSession(token), lastUsed: now, lastResponseId: null };
+    sessionPool.set(key, s);
   }
   s.lastUsed = now;
-  return s.id;
+  return s;
 }
 
 // ===== 消息拼接：DeepSeek 网页版只接受单个 prompt 字符串 =====
@@ -181,6 +193,33 @@ function buildPrompt(messages, systemPrompt) {
   }
   // 多轮时把历史压成一段，末尾是当前问题
   return parts.join('\n\n');
+}
+
+// ===== 增量模式：裁掉历史，只留本轮 =====
+// 上游会话本身记着前文（靠 parent_message_id 串接），所以没必要每轮把整段历史
+// 重新拼进 prompt —— 那样既费 token 又拖慢首字。这里只保留：
+//   1) 本轮所有 user 消息（合并成一段；多轮 tool 循环时会连续 push 多条）
+//   2) 紧随其后的 assistant 消息（本轮刚答完的，作为「上一句」给模型对齐）
+//   3) 明确丢弃更早的轮次
+// 若该会话尚未发过言（first=false），说明上游还没有任何上下文，此时退回完整历史，
+// 否则模型会完全失忆。
+function buildIncrementalMessages(messages, hasParent) {
+  const list = Array.isArray(messages) ? messages : [];
+  if (!hasParent) return list; // 首轮：上游没有任何上下文，必须给全量
+
+  // 只取末尾连续的本轮 user 消息。
+  // 一旦往前碰到 assistant，就说明那是**上一轮**的回答 —— 上游会话已经记住了，
+  // 再带上它等于把历史重复发一遍，正是增量模式要避免的。
+  // 典型序列 [u1, a1, u2] 在这里只保留 [u2]。
+  const tail = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    if (!m || m.role !== 'user') break;
+    tail.unshift(m);
+  }
+  if (tail.length) return tail;
+  // 兜底：末尾不是 user（例如重试场景），退化为只发最后一条，避免空 prompt
+  return list.length ? list.slice(-1) : list;
 }
 
 // ===== 上游 SSE 解析 =====
@@ -430,14 +469,29 @@ async function handleChat(request, env, tokens) {
     (env && env.THINKING === 'enabled');
   const search = body.search_enabled === true || (env && env.SEARCH === 'enabled');
 
-  const prompt = buildPrompt(messages, body.system);
+  // ===== 两个独立开关（都可单独开关，互不依赖）=====
+  // incremental：增量模式。不再每轮把整段历史拼进 prompt，只发本次输入，
+  //              上下文靠 parent_message_id 串到上一轮回答上（上游会话记忆，实测有效）。
+  // singleChat ：单次对话。反代侧永远复用同一个 chat_session，过期也不重建，
+  //              于是 chat.deepseek.com 里始终只有一个对话，不会越开越多。
+  const incremental = body.incremental === true || (env && env.INCREMENTAL === 'enabled');
+  const singleChat = body.single_chat === true || (env && env.SINGLE_CHAT === 'enabled');
+
+  let prompt = buildPrompt(messages, body.system);
   let lastErr = null;
 
   // 账号池轮询：任意一个 token 成功即可
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     try {
-      const sid = await acquireSession(token);
+      const scope = (body && (body.conversation_scope || body.session_scope)) || '';
+      const sess = await acquireSession(token, { persistent: singleChat, scope });
+      const sid = sess.id;
+      // 增量模式：parent 指向上一次的回答；该会话还没发过言时退回 null（首轮）
+      const parentId = incremental ? sess.lastResponseId || null : null;
+      if (incremental) {
+        prompt = buildPrompt(buildIncrementalMessages(messages, !!sess.lastResponseId), body.system);
+      }
       const pow = await getPowHeader(token);
       const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
         method: 'POST',
@@ -447,7 +501,7 @@ async function handleChat(request, env, tokens) {
         }),
         body: JSON.stringify({
           chat_session_id: sid,
-          parent_message_id: null,
+          parent_message_id: parentId,
           model_type: 'default',
           prompt,
           ref_file_ids: [],
@@ -464,12 +518,15 @@ async function handleChat(request, env, tokens) {
         continue; // 换下一个账号
       }
 
-      if (stream) return streamResponse(upstream, model, env, thinking, request);
-      return await aggregateResponse(upstream, model, env, thinking, request);
+      const onResponseId = function (rid) {
+        if (rid) sess.lastResponseId = rid;
+      };
+      if (stream) return streamResponse(upstream, model, env, thinking, request, onResponseId);
+      return await aggregateResponse(upstream, model, env, thinking, request, onResponseId);
     } catch (e) {
       lastErr = e;
-      // 会话可能失效，清掉让它重建
-      sessionPool.delete(token);
+      // 会话可能失效，清掉让它重建（按同样的 key，避免误删别的会话）
+      sessionPool.delete(poolKey(token, (body && (body.conversation_scope || body.session_scope)) || ''));
     }
   }
 
@@ -486,7 +543,7 @@ async function handleChat(request, env, tokens) {
 }
 
 // 非流式：把上游 SSE 聚合成一次性响应
-async function aggregateResponse(upstream, model, env, thinking, request) {
+async function aggregateResponse(upstream, model, env, thinking, request, onResponseId) {
   const text = await upstream.text();
   const feed = makeParser();
   let content = '';
@@ -505,6 +562,9 @@ async function aggregateResponse(upstream, model, env, thinking, request) {
       data = JSON.parse(dataStr);
     } catch (e) {
       continue;
+    }
+    if (eventName === 'ready' && data && data.response_message_id && onResponseId) {
+      try { onResponseId(data.response_message_id); } catch (e) {}
     }
     const delta = feed(eventName, data);
     if (delta) {
@@ -531,7 +591,7 @@ async function aggregateResponse(upstream, model, env, thinking, request) {
 }
 
 // 流式：逐块转发 OpenAI chunk
-function streamResponse(upstream, model, env, thinking, request) {
+function streamResponse(upstream, model, env, thinking, request, onResponseId) {
   const id = randomId();
   const encoder = new TextEncoder();
   const feed = makeParser();
@@ -567,6 +627,10 @@ function streamResponse(upstream, model, env, thinking, request) {
               data = JSON.parse(dataStr);
             } catch (e) {
               continue;
+            }
+            // ready 事件带着本轮回答的消息 id —— 增量模式下下一轮的 parent_message_id 就是它
+            if (eventName === 'ready' && data && data.response_message_id && onResponseId) {
+              try { onResponseId(data.response_message_id); } catch (e) {}
             }
             const d = feed(eventName, data);
             if (!d) continue;

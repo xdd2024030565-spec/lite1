@@ -367,7 +367,7 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 }
 
 /* ===== 输入区上方的当前模型（主流做法：就手可切）===== */
-.inputmeta{max-width:860px;margin:0 auto 6px;display:flex;align-items:center;gap:8px;min-width:0}
+.inputmeta{max-width:860px;margin:0 auto 6px;display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
 .model-btn{
   display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--mono);
   background:transparent;border:1px solid var(--line);color:var(--fg-dim);border-radius:2px;
@@ -375,6 +375,9 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
 }
 .model-btn:hover{color:var(--acc);border-color:var(--acc)}
 .model-btn .mb-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* 三个开关按钮：窄屏允许换行，且不必为了挤在一行而截断文字 */
+.model-btn.search-toggle{flex:0 0 auto;max-width:none}
+.model-btn.search-toggle .mb-t{overflow:visible;text-overflow:clip}
 .model-btn .mb-c{color:var(--fg-faint);flex-shrink:0}
 /* 联网搜索开关：关闭态沿用 model-btn 的灰底，开启态用强调色 */
 .model-btn.search-toggle[hidden]{display:none}
@@ -564,6 +567,8 @@ button,input,select,textarea{font-family:inherit;font-size:13px}
       <div class="inputmeta">
         <button class="model-btn" id="modelBtn" title="切换模型"><span class="mb-t" id="modelBtnText">未配置模型</span><span class="mb-c">▾</span></button>
         <button class="model-btn search-toggle" id="searchToggle" title="联网搜索" type="button"><span class="mb-t" id="searchToggleText">联网搜索 关</span></button>
+        <button class="model-btn search-toggle" id="incrementalToggle" title="增量模式" type="button"><span class="mb-t" id="incrementalToggleText">增量模式 关</span></button>
+        <button class="model-btn search-toggle" id="singleChatToggle" title="单次对话" type="button"><span class="mb-t" id="singleChatToggleText">单次对话 关</span></button>
         <span class="hint" id="inputHint"></span>
       </div>
       <div class="inputwrap">
@@ -823,7 +828,7 @@ let mcpServers=load(LS_KEYS.mcp,[]);
 let plugins=load(LS_KEYS.plugins,[]);
 let builtinTools=load(LS_KEYS.builtin,DEFAULT_BUILTIN);
 let skills=load(LS_KEYS.skills,DEFAULT_SKILLS);
-let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true,autoCompress:true,compressTh:80,webSearch:false});
+let settings=load(LS_KEYS.settings,{temperature:0.7,maxTokens:2048,useProxy:false,proxyBase:'https://ai.yongjiu.ccwu.cc',maxRetry:5,autoRetry429:true,autoCompress:true,compressTh:80,webSearch:false,webIncremental:false,webSingleChat:false});
 // 内置公共代理（解决浏览器 CORS：商汤/OpenAI 等预检不完整）
 const BUILTIN_PROXY='https://ai.yongjiu.ccwu.cc';
 // 这些上游经浏览器直连会被 CORS 拦，建议强制走代理
@@ -944,15 +949,25 @@ function updateModelBtn(){
    Worker 侧读 body.search_enabled，转发成上游的 search_enabled。
    其它 OpenAI 兼容接口没有这个标准字段，因此对它们隐藏开关。 */
 function searchCapableProvider(){const p=curProvider();return !!(p&&p.webSearch)}
-function updateSearchToggle(){
-  const btn=$('searchToggle'),txt=$('searchToggleText');
+function renderToggle(btnId,txtId,on,label,onTip,offTip){
+  const btn=$(btnId),txt=$(txtId);
   if(!btn)return;
   if(!searchCapableProvider()){btn.hidden=true;return}
   btn.hidden=false;
-  const on=!!settings.webSearch;
   btn.classList.toggle('on',on);
-  if(txt)txt.textContent=on?'联网搜索 开':'联网搜索 关';
-  btn.title=on?'当前对话已开启联网搜索：模型会先检索网页再回答\n点击关闭':'当前对话未联网：模型只依据自身知识回答\n点击开启（仅 DeepSeek 网页版支持）';
+  if(txt)txt.textContent=label+(on?' 开':' 关');
+  btn.title=on?onTip:offTip;
+}
+function updateSearchToggle(){
+  renderToggle('searchToggle','searchToggleText',!!settings.webSearch,'联网搜索',
+    '当前对话已开启联网搜索：模型会先检索网页再回答\n点击关闭',
+    '当前对话未联网：模型只依据自身知识回答\n点击开启（仅 DeepSeek 网页版支持）');
+  renderToggle('incrementalToggle','incrementalToggleText',!!settings.webIncremental,'增量模式',
+    '已开启：每轮只发本次输入，前文靠上游会话记忆\n点击关闭',
+    '未开启：每轮重发全部历史（更费流量但最稳妥）\n点击开启（仅 DeepSeek 网页版支持）');
+  renderToggle('singleChatToggle','singleChatToggleText',!!settings.webSingleChat,'单次对话',
+    '已开启：网页版里始终只有一个对话\n点击关闭',
+    '未开启：网页版会随会话过期新建对话\n点击开启（仅 DeepSeek 网页版支持）');
 }
 function toggleWebSearch(){
   if(!searchCapableProvider()){toast('当前模型不支持联网搜索（仅内置 DeepSeek 网页版）');return}
@@ -960,6 +975,20 @@ function toggleWebSearch(){
   persist();
   updateSearchToggle();
   toast(settings.webSearch?'联网搜索已开启':'联网搜索已关闭');
+}
+function toggleIncremental(){
+  if(!searchCapableProvider()){toast('该功能仅内置 DeepSeek 网页版支持');return}
+  settings.webIncremental=!settings.webIncremental;
+  persist();
+  updateSearchToggle();
+  toast(settings.webIncremental?'增量模式已开启：以后只发本次输入':'增量模式已关闭：恢复每轮全量历史');
+}
+function toggleSingleChat(){
+  if(!searchCapableProvider()){toast('该功能仅内置 DeepSeek 网页版支持');return}
+  settings.webSingleChat=!settings.webSingleChat;
+  persist();
+  updateSearchToggle();
+  toast(settings.webSingleChat?'单次对话已开启：网页版只保留一个对话':'单次对话已关闭');
 }
 
 const PROVIDER_TEMPLATES={
@@ -2346,6 +2375,25 @@ function buildHeaders(p){
   return h;
 }
 
+// 网页版反代的三个独立开关（联网搜索 / 增量模式 / 单次对话）
+// 只有内置 DeepSeek 网页版（p.webSearch）才具备，其它 OpenAI 兼容接口不传这些字段。
+function webScopeId(){
+  let v=load('ai.scopeId',null);
+  if(!v){
+    v='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+    save('ai.scopeId',v);
+  }
+  return v;
+}
+function applyWebFlags(body,p){
+  if(!p||!p.webSearch)return;
+  if(settings.webSearch)body.search_enabled=true;
+  if(settings.webIncremental)body.incremental=true;
+  if(settings.webSingleChat)body.single_chat=true;
+  // 会话隔离：lite / lite1 / 多标签页互不污染上下文
+  body.conversation_scope=webScopeId();
+}
+
 // ===== 非流式请求（供工具循环备用） =====
 async function chatOnce(messages,tools){
   const p=curProvider();
@@ -2355,7 +2403,7 @@ async function chatOnce(messages,tools){
   const model=curModel()||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:false};
   if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
-  if(p.webSearch&&settings.webSearch)body.search_enabled=true;
+  applyWebFlags(body,p);
   const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body)});
   if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
   return await r.json();
@@ -2370,7 +2418,7 @@ async function chatStreamFull(messages,onDelta,tools){
   const model=curModel()||(p.models||[])[0];
   const body={model:model,messages:messages,temperature:settings.temperature||0.7,max_tokens:settings.maxTokens||2048,stream:true};
   if(tools&&tools.length){body.tools=tools;body.tool_choice="auto";}
-  if(p.webSearch&&settings.webSearch)body.search_enabled=true;
+  applyWebFlags(body,p);
   abortCtrl=new AbortController();
   const r=await fetch(buildUrl(p),{method:"POST",headers:buildHeaders(p),body:JSON.stringify(body),signal:abortCtrl.signal});
   if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,300));}
@@ -2753,6 +2801,8 @@ $('statusChip').onclick=openModelPicker;
 $('modelBtn').onclick=openModelPicker;
 // 联网搜索开关（仅内置 DeepSeek 网页版显示）
 $('searchToggle').onclick=toggleWebSearch;
+$('incrementalToggle').onclick=toggleIncremental;
+$('singleChatToggle').onclick=toggleSingleChat;
 $('mpClose').onclick=closeModelPicker;
 $('mpManage').onclick=function(){closeModelPicker();showSbView('models');openSidebar();};
 $('mpSearch').oninput=renderModelPicker;
