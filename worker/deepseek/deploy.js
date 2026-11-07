@@ -231,11 +231,16 @@ function makeParser() {
         }
         return null;
       }
-      // 2b. 段内文本补丁：{"p":"response/fragments/-1/content","v":" need"}
+      // 2b. 段内文本补丁：{"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
+      //     ⚠️ "-1" 指的是**当前最后一个 fragment**（fragments[-1]），不是「新建一段」。
+      //     它的 type 必须沿用 current 的 type —— 思考段的后续碎片正是这样追加的。
+      //     曾把 -1 当成新建 RESPONSE 段，导致 THINK 段一旦被追加就"变成"正文：
+      //     思考只剩快照里的头几个字，后面整段思考全混进 content（2026-11-07 实测复现）。
       const m = data.p.match(/fragments\/(-?\d+)\/content$/);
       if (m && typeof data.v === 'string') {
         if (m[1] === '-1') {
-          current = { id: null, type: 'RESPONSE', content: data.v };
+          if (!current) current = { id: null, type: 'RESPONSE', content: '' };
+          current.content += data.v;
           return { content: current.content, type: current.type, append: data.v };
         }
         if (!current) current = { id: m[1], type: 'RESPONSE', content: '' };
