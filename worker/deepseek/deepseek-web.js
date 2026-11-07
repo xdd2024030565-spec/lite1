@@ -207,12 +207,16 @@ function makeParser() {
     if (data.v === undefined && data.p === undefined) return null;
 
     // --- 形态 1：快照（含 fragments 数组）---
+    //     fragments 里除了 THINK（思考）/ RESPONSE（正文），还可能有 TIP（页脚提示，
+    //     如「本回答由 AI 生成，仅供参考」）。TIP 既不是用户要的答案，也不是思考过程，
+    //     必须跳过，否则它会被当成正文输出（实测非流式只剩这句提示，正文丢失）。
     if (data.v && typeof data.v === 'object' && data.v.response) {
       const frags = data.v.response.fragments || [];
       let out = null;
       for (const f of frags) {
         if (typeof f.content !== 'string') continue;
         current = { id: f.id, type: f.type || 'RESPONSE', content: f.content };
+        if (f.type === 'TIP') continue;
         out = { content: f.content, type: current.type, append: f.content };
       }
       return out;
@@ -226,6 +230,9 @@ function makeParser() {
         const frag = Array.isArray(data.v) ? data.v[0] : data.v;
         if (frag && typeof frag === 'object' && typeof frag.content === 'string') {
           current = { id: frag.id, type: frag.type || 'RESPONSE', content: frag.content };
+          // TIP 是页脚提示，不属于答案也不属于思考，跳过；但 current 已更新，
+          // 后续裸碎片仍会落到正确的段上。
+          if (frag.type === 'TIP') return null;
           return { content: frag.content, type: current.type, append: frag.content };
         }
         return null;
