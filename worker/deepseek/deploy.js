@@ -149,6 +149,28 @@ function loadTokens(env) {
 }
 
 // 会话池：key = token + 用途，value = { id, lastUsed, lastResponseId }
+// ===== 全局限速（保护上游账号）=====
+// 目的：避免前端异常重试 / 多标签页并发 / 误用脚本把上游打成高频调用，
+// 那会触发 DeepSeek 风控并导致 token 被吊销（2026-11-07 真发生过一次）。
+// 做法很简单但有效：同一 Worker 实例内，两次「真正发往上游」的对话请求
+// 至少间隔 MIN_GAP_MS。超出的请求不是报错丢弃，而是**等一下**再发，
+// 对正常用户几乎无感（人打字间隔远大于它），对本机压力近似线性限制。
+const MIN_GAP_MS = 1500;      // 两次上游对话请求的最小间隔
+let _lastUpstreamAt = 0;
+let _gateChain = Promise.resolve();
+function upstreamGate() {
+  // 串行化：保证检查与更新之间不被并发请求穿插
+  const run = async () => {
+    const now = Date.now();
+    const wait = _lastUpstreamAt + MIN_GAP_MS - now;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    _lastUpstreamAt = Date.now();
+  };
+  const p = _gateChain.then(run, run);
+  _gateChain = p.catch(() => {});
+  return p;
+}
+
 const sessionPool = new Map();
 
 function poolKey(token, scope) {
@@ -667,6 +689,8 @@ async function handleChat(request, env, tokens) {
       }
       // 复用 ctx 已经解出的 PoW（target_path 相同，可直接用），省掉一次 WASM 计算
       const pow = ctx.powCacheValue || (await ctx.pow('/api/v0/chat/completion'));
+      // 过限速闸：避免短时间内连续打上游（这是账号被封的主要诱因）
+      await upstreamGate();
       const upstream = await fetch(DEEPSEEK_BASE + '/api/v0/chat/completion', {
         method: 'POST',
         headers: authHeaders(token, {
