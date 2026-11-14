@@ -21,7 +21,7 @@ import { route } from './lib/route.js';
 import { jsonResp, corsHeaders } from './lib/http.js';
 import * as doubao from './sites/doubao.js';
 import * as grok from './sites/grok.js';
-import * as qwen from './sites/qwen.js';
+import * as glm from './sites/glm.js';
 import * as kimi from './sites/kimi.js';
 import * as wasmNs from './sha3_wasm_bg.wasm';
 // Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
@@ -539,7 +539,7 @@ function bearer(request) {
 function dispatch(request, env, url, r) {
   if (r.site === 'doubao') return handleDoubao(request, env, r.path, url);
   if (r.site === 'grok') return handleGrok(request, env, r.path, url);
-  if (r.site === 'qwen') return handleSimpleSite(request, env, r.path, url, 'qwen');
+  if (r.site === 'glm') return handleSimpleSite(request, env, r.path, url, 'glm');
   if (r.site === 'kimi') return handleSimpleSite(request, env, r.path, url, 'kimi');
   return handleDeepseek(request, env, url, r.path);
 }
@@ -575,7 +575,7 @@ function deepseekHealth(request, env) {
   const dsOk = tk.length > 0 || headerIsToken;
   const doubaoOk = doubaoToken(env).length > 0;
   const grokOk = grok.health(env).ok;
-  const qwenOk = qwen.health(env).ok;
+  const glmOk = glm.health(env).ok;
   const kimiOk = kimi.health(env).ok;
   if (!hdr) {
     return jsonResp(
@@ -585,7 +585,7 @@ function deepseekHealth(request, env) {
           deepseek: dsOk ? 'ok' : 'no_token',
           doubao: doubaoOk ? 'ok' : 'no_token',
           grok: grokOk ? 'ok' : 'no_token',
-          qwen: qwenOk ? 'ok' : 'no_token',
+          glm: glmOk ? 'ok' : 'no_token',
           kimi: kimiOk ? 'ok' : 'no_token',
         },
       },
@@ -605,7 +605,7 @@ function deepseekHealth(request, env) {
         deepseek: { ok: dsOk, kind: dsOk ? 'ok' : 'no_token' },
         doubao: { ok: doubaoOk, kind: doubaoOk ? 'ok' : 'no_token' },
         grok: { ok: grokOk, kind: grokOk ? 'ok' : 'no_token' },
-        qwen: { ok: qwenOk, kind: qwenOk ? 'ok' : 'no_token' },
+        glm: { ok: glmOk, kind: glmOk ? 'ok' : 'no_token' },
         kimi: { ok: kimiOk, kind: kimiOk ? 'ok' : 'no_token' },
       },
     },
@@ -798,12 +798,12 @@ async function handleGrok(request, env, path, url) {
 }
 
 /*
- * qwen / kimi 这类「只有一次性对话、没有历史会话列表」的站点走同一个处理函数：
+ * glm / kimi 这类「只有一次性对话、没有历史会话列表」的站点走同一个处理函数：
  * /health、/models、空的会话接口、/chat/completions 转发。
  */
 async function handleSimpleSite(request, env, path, url, siteId) {
-  const mod = siteId === 'qwen' ? qwen : kimi;
-  const envKey = siteId === 'qwen' ? 'QWEN_TOKENS' : 'KIMI_TOKENS';
+  const mod = siteId === 'glm' ? glm : kimi;
+  const envKey = siteId === 'glm' ? 'GLM_TOKENS' : 'KIMI_TOKENS';
   const hdr = bearer(request);
   const pk = env && env.PROXY_KEY;
   const secrets = splitTokens(env && env[envKey]);

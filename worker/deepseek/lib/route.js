@@ -3,7 +3,7 @@
  * 没写站点前缀的老路径按 legacy 处理（等价于 deepseek 站点）。
  */
 
-export const SITE_IDS = ['deepseek', 'doubao', 'grok', 'qwen', 'kimi'];
+export const SITE_IDS = ['deepseek', 'doubao', 'grok', 'glm', 'kimi'];
 
 const SITE_PREFIX = /^\/([a-z0-9_-]+)(\/.*)?$/;
 

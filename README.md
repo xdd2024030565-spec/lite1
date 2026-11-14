@@ -132,8 +132,8 @@ npx wrangler deploy
 | `/deepseek/v1/*` | chat.deepseek.com | 与老路径完全等价 |
 | `/doubao/v1/*` | www.doubao.com | 豆包网页版（单轮拼多轮，流式翻译） |
 | `/grok/v1/*` | grok.com | Grok 网页版（NDJSON 逐行翻译成 OpenAI chunk，纯对话） |
-| `/qwen/v1/*` | chat.qwen.ai | 通义千问网页版（建临时会话 → 发消息 → SSE 转发） |
-| `/kimi/v1/*` | kimi.moonshot.cn | Kimi 网页版（refresh_token 换 access_token，建会话发消息） |
+| `/glm/v1/*` | chatglm.cn | 智谱清言网页版（刷 token → 时间戳签名 → 全量快照转增量） |
+| `/kimi/v1/*` | www.kimi.ai | Kimi 网页版（Connect RPC 帧协议，access 直用或 refresh 换） |
 | `/v1/*`、`/chat/completions` | chat.deepseek.com | legacy，等价于 `/deepseek/v1/*` |
 | `/health` | — | 不带口令只回 `{ok, sites}`；带 `Authorization` 才回 token 数量等细节 |
 
@@ -152,14 +152,18 @@ npx wrangler deploy
   所以走「随部署上传变量」这条路；值不落仓库、日志按字段脱敏）
 - 聊天请求必须同时带 `modelName` 与 `modelMode`：模式由 `POST /rest/models` 按 token 读取并缓存 10 分钟，
   只发模型名会被上游回「This model is temporarily unavailable」
-- 通义适配器在 `worker/deepseek/sites/qwen.js`：先 `POST /api/v2/chats/new` 建会话，
-  再 `POST /api/v2/chat/completions?chat_id=` 发消息，`choices[0].delta.content` 直通；
-  凭证是网页端 localStorage 的 `token`，写进仓库 secret `QWEN_TOKENS`
-- Kimi 适配器在 `worker/deepseek/sites/kimi.js`：`GET /api/auth/token/refresh` 用 refresh_token
-  换 access_token（按 refresh_token 缓存 8 分钟），`POST /api/chat` 建会话，
-  `POST /api/chat/{id}/completion/stream` 发消息（`event: cmpl` 的 `text` 翻成 `delta.content`，
-  `all_done` 收尾，结束后 `DELETE /api/chat/{id}` 清掉临时会话）；凭证写进仓库 secret `KIMI_TOKENS`
-- 三家的凭证都走同一条注入路径：部署时从仓库 secret 读 `GROK_TOKENS` / `QWEN_TOKENS` / `KIMI_TOKENS`，
+- 智谱清言适配器在 `worker/deepseek/sites/glm.js`：`POST /chatglm/user-api/user/refresh` 用
+  `chatglm_refresh_token` 换 access（缓存 1 小时），`POST /chatglm/backend-api/assistant/stream` 发消息；
+  每个请求要带 `X-Sign`/`X-Timestamp`/`X-Nonce`（时间戳倒数第二位写成校验位 + md5，实现在 `lib/md5.js`）；
+  上游每帧 `parts` 是全量快照，适配器按全文 diff 算增量再转 `delta.content`
+  （`type=think` 走 `delta.reasoning_content`），`status=finish` 收尾；凭证写进仓库 secret `GLM_TOKENS`
+- Kimi 适配器在 `worker/deepseek/sites/kimi.js`：上游已迁到 Connect RPC——
+  `POST https://auth.kimi.ai/api/account.gateway.v1.AuthService/RefreshToken` 换 access，
+  `POST https://www.kimi.ai/apiv2/kimi.gateway.chat.v1.ChatService/Chat` 发消息；
+  请求体是「1 字节标志位 + 4 字节大端长度 + JSON」的帧（`encodeFrame` / `takeFrames`），
+  `block.text.content` 翻成 `delta.content`、`block.think.content` 翻成 `delta.reasoning_content`、`done` 收尾；
+  `KIMI_TOKENS` 放 `kimi-refresh` cookie，或直接放 `typ=access` 的 JWT（15 分钟，适配器会自动识别直用）
+- 各站凭证都走同一条注入路径：部署时从仓库 secret 读 `GROK_TOKENS` / `GLM_TOKENS` / `KIMI_TOKENS`，
   写进临时 `wrangler.ci.toml` 的 `[vars]` 再上传；日志按字段脱敏
 - 健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
 - 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
