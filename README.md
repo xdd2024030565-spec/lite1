@@ -131,6 +131,7 @@ npx wrangler deploy
 |---|---|---|
 | `/deepseek/v1/*` | chat.deepseek.com | 与老路径完全等价 |
 | `/doubao/v1/*` | www.doubao.com | 豆包网页版（单轮拼多轮，流式翻译） |
+| `/grok/v1/*` | grok.com | Grok 网页版（NDJSON 逐行翻译成 OpenAI chunk，纯对话） |
 | `/v1/*`、`/chat/completions` | chat.deepseek.com | legacy，等价于 `/deepseek/v1/*` |
 | `/health` | — | 不带口令只回 `{ok, sites}`；带 `Authorization` 才回 token 数量等细节 |
 
@@ -140,5 +141,10 @@ npx wrangler deploy
   Cookie 用 `sessionid`，SSE 的 `event_type=2001` 翻成 `choices[0].delta.content`，
   `2003` / `is_finish` 收尾；图片事件（`content_type=2074`）暂不渲染
 - 豆包凭证：`wrangler secret put DOUBAO_TOKENS`（多个用逗号分隔），或前端在设置里填 `sessionid`
+- Grok 适配器在 `worker/deepseek/sites/grok.js`：请求 `POST /rest/app-chat/conversations/new`，
+  Cookie 用 `sso`，上游逐行 JSON 的 `result.response.token` 翻成 `delta.content`
+  （`isThinking` 走 `delta.reasoning_content`），`isFinal` 收尾；
+  `x-statsig-id` 默认内置固定值，被拒时可用 secret `GROK_STATSIG_ID` 覆盖
+- Grok 凭证：`wrangler secret put GROK_TOKENS`；健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
 - 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
   （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、鉴权与健康检查）

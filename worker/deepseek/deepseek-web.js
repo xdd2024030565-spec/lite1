@@ -20,6 +20,7 @@
 import { route } from './lib/route.js';
 import { jsonResp, corsHeaders } from './lib/http.js';
 import * as doubao from './sites/doubao.js';
+import * as grok from './sites/grok.js';
 import * as wasmNs from './sha3_wasm_bg.wasm';
 // Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
 // Node --experimental-wasm-modules：命名空间就是 wasm 的导出对象本身
@@ -535,6 +536,7 @@ function bearer(request) {
 
 function dispatch(request, env, url, r) {
   if (r.site === 'doubao') return handleDoubao(request, env, r.path, url);
+  if (r.site === 'grok') return handleGrok(request, env, r.path, url);
   return handleDeepseek(request, env, url, r.path);
 }
 
@@ -735,6 +737,52 @@ async function handleDoubao(request, env, path, url) {
     return doubao.chat(request, env, tokens, url);
   }
   return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
+
+async function handleGrok(request, env, path, url) {
+  if (path === '/health') return jsonResp(grok.health(env), 200, env, request);
+  if (path === '/v1/models' || path === '/models') {
+    return jsonResp(
+      {
+        object: 'list',
+        data: grok.models.map(function (m) {
+          return { id: m.id, object: 'model', created: 1700000000, owned_by: 'grok-web', name: m.name };
+        }),
+      },
+      200, env, request
+    );
+  }
+  // Grok 网页版没有可绑定的历史会话接口，返回空列表让前端走本机对话
+  if (path === '/v1/sessions') return jsonResp({ object: 'list', data: [] }, 200, env, request);
+  if (path === '/v1/sessions/messages') return jsonResp({ id: '', count: 0, messages: [] }, 200, env, request);
+
+  if (path === '/v1/chat/completions' || path === '/chat/completions') {
+    const hdr = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    const pk = env && env.PROXY_KEY;
+    let tokens = grokToken(env);
+    if (!tokens.length && hdr && !pk) tokens = [hdr];
+    if (!tokens.length) {
+      return jsonResp(
+        {
+          error: {
+            message: '未配置 Grok 凭证。两种方式任选：① wrangler secret put GROK_TOKENS；② 在设置里填 grok.com 登录 Cookie 里的 sso。',
+            type: 'config',
+          },
+        },
+        503, env, request
+      );
+    }
+    return grok.chat(request, env, tokens, url);
+  }
+  return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
+
+function grokToken(env) {
+  const raw = (env && env.GROK_TOKENS) || '';
+  return String(raw)
+    .split(',')
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) { return !!t; });
 }
 
 async function handleChat(request, env, tokens) {
