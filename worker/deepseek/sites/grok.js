@@ -21,7 +21,64 @@ const UA =
 // 被上游拒绝时可用 secret GROK_STATSIG_ID 覆盖。
 const DEFAULT_STATSIG = 'ZTp0eXBlOmZlYXR1cmVfZ2F0ZTpzdGF0c2lnX2lkLGtleTphYmMxMjM';
 
-export const models = [{ id: MODEL, name: 'Grok 3' }];
+export const models = [
+  { id: 'grok-3', name: 'Grok 3' },
+  { id: 'grok-4-1-thinking-1129', name: 'Grok 4.1 Thinking' },
+];
+
+/*
+ * grok.com 的模型清单由 POST /rest/models 给出，每个模型带 modelMode，
+ * 聊天请求要把 modelName 和 modelMode 一起发，否则上游会回
+ * "This model is temporarily unavailable"。这里按 token 缓存 10 分钟。
+ */
+const MODE_CACHE = { token: '', at: 0, list: [] };
+const MODE_TTL = 600000;
+
+export async function listModels(token) {
+  if (!token) return { list: models, byId: {} };
+  const now = Date.now();
+  if (MODE_CACHE.token === token && now - MODE_CACHE.at < MODE_TTL && MODE_CACHE.list.length) {
+    return MODE_CACHE;
+  }
+  const headers = {
+    accept: '*/*',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    origin: HOST,
+    referer: HOST + '/',
+    'user-agent': UA,
+    'content-type': 'application/json',
+    'x-statsig-id': DEFAULT_STATSIG,
+    'x-xai-request-id': uuid(),
+    cookie: 'sso=' + token,
+  };
+  try {
+    const r = await fetch(HOST + '/rest/models', { method: 'POST', headers: headers, body: '{}' });
+    if (!r.ok) return { list: models, byId: {} };
+    const data = await r.json();
+    const raw = Array.isArray(data && data.models) ? data.models : [];
+    const list = [];
+    const byId = {};
+    for (let i = 0; i < raw.length; i++) {
+      const m = raw[i];
+      if (!m || !m.modelId) continue;
+      const tags = m.tags || [];
+      if (tags.indexOf('hide_tools_settings') >= 0) continue;
+      const item = { id: m.modelId, mode: m.modelMode || '', name: m.modelId };
+      list.push(item);
+      byId[item.id] = item;
+    }
+    if (list.length) {
+      MODE_CACHE.token = token;
+      MODE_CACHE.at = now;
+      MODE_CACHE.list = list;
+      MODE_CACHE.byId = byId;
+      return MODE_CACHE;
+    }
+  } catch (e) {
+    /* 元信息拿不到就退回静态清单 */
+  }
+  return { list: models, byId: {} };
+}
 
 function uuid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -69,6 +126,9 @@ export function buildChatRequest(opts) {
     disableThinking: false,
     isAsyncChat: false,
   };
+  if (o.mode) {
+    body.modelMode = o.mode;
+  }
   const headers = {
     'content-type': 'application/json',
     accept: '*/*',
@@ -245,10 +305,14 @@ export async function chat(request, env, tokens, url) {
   if (!text) {
     return jsonResp({ error: { message: '消息为空', type: 'invalid_request' } }, 400, env, request);
   }
+  const want = body.model || MODEL;
+  const meta = await listModels(token);
+  const picked = meta.byId && meta.byId[want] ? meta.byId[want] : { id: want, mode: '' };
   const req = buildChatRequest({
     token: token,
     text: text,
-    model: body.model,
+    model: picked.id,
+    mode: picked.mode,
     statsig: env && env.GROK_STATSIG_ID,
   });
   let upstream;

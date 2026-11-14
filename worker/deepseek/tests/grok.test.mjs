@@ -89,3 +89,11 @@ test('健康检查只看配置，不打上游', () => {
   }
   assert.equal(called, 0);
 });
+
+test('模型清单带 modelMode，聊天请求要一起发', async () => {
+  const { buildChatRequest } = await import('../sites/grok.js');
+  const req = buildChatRequest({ token: 't', text: 'hi', model: 'grok-3', mode: 'MODEL_MODE_FAST' });
+  const body = JSON.parse(req.init.body);
+  assert.equal(body.modelName, 'grok-3');
+  assert.equal(body.modelMode, 'MODEL_MODE_FAST');
+});

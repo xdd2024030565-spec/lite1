@@ -761,10 +761,11 @@ async function handleGrok(request, env, path, url) {
     );
   }
   if (path === '/v1/models' || path === '/models') {
+    const list = grokToken(env).length ? (await grok.listModels(grokToken(env)[0])).list : grok.models;
     return jsonResp(
       {
         object: 'list',
-        data: grok.models.map(function (m) {
+        data: list.map(function (m) {
           return { id: m.id, object: 'model', created: 1700000000, owned_by: 'grok-web', name: m.name };
         }),
       },
