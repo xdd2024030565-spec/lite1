@@ -303,51 +303,57 @@ export function health(env) {
 }
 
 /*
- * 临时诊断：用调用方自己带来的 sso 去问 grok.com 几个只读元信息接口，
- * 把状态码和响应片段回给运维判断（不触发任何生成，不消耗额度）。
- * 确认模型清单后就删掉这段。
+ * 临时诊断：用调用方自己带来的 sso 去问 grok.com 的只读接口，
+ * 帮助定位模型名与请求形状；不触发生成、不消耗额度。确认后删除。
  */
-const PROBE_TARGETS = [
-  { method: 'GET', path: '/rest/models' },
-  { method: 'GET', path: '/rest/app-chat/models' },
-  { method: 'POST', path: '/rest/app-chat/list-available-v2', body: {} },
-  { method: 'GET', path: '/rest/user-settings' },
-  { method: 'GET', path: '/rest/app-chat/user-settings' },
-  { method: 'POST', path: '/rest/app-chat/conversations', body: { pageSize: 1 } },
-];
+function probeHeaders(token) {
+  return {
+    accept: '*/*',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    origin: HOST,
+    referer: HOST + '/',
+    'user-agent': UA,
+    'x-statsig-id': DEFAULT_STATSIG,
+    'x-xai-request-id': uuid(),
+    cookie: 'sso=' + token,
+  };
+}
 
-export async function probe(token) {
+export async function probe(token, opt) {
   if (!token) return { error: '需要在请求头带 Authorization: Bearer <grok sso>' };
-  const out = [];
-  for (let i = 0; i < PROBE_TARGETS.length; i++) {
-    const t = PROBE_TARGETS[i];
-    const headers = {
-      accept: '*/*',
-      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      origin: HOST,
-      referer: HOST + '/',
-      'user-agent': UA,
-      'x-statsig-id': DEFAULT_STATSIG,
-      'x-xai-request-id': uuid(),
-      cookie: 'sso=' + token,
-    };
-    if (t.body) headers['content-type'] = 'application/json';
+  const o = opt || {};
+  const one = async function (method, path, body) {
+    const headers = probeHeaders(token);
+    if (body) headers['content-type'] = 'application/json';
     try {
-      const r = await fetch(HOST + t.path, {
-        method: t.method,
+      const r = await fetch(HOST + path, {
+        method: method,
         headers: headers,
-        body: t.body ? JSON.stringify(t.body) : undefined,
+        body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
       });
       let text = '';
       try {
-        text = (await r.text()).slice(0, 400);
+        text = await r.text();
       } catch (e) {
         text = '';
       }
-      out.push({ path: t.path, status: r.status, contentType: r.headers.get('content-type'), text: text });
+      return { path: path, method: method, status: r.status, contentType: r.headers.get('content-type'), text: text.slice(0, 1200), length: text.length };
     } catch (e) {
-      out.push({ path: t.path, error: String(e && e.message ? e.message : e).slice(0, 200) });
+      return { path: path, method: method, error: String(e && e.message ? e.message : e).slice(0, 200) };
     }
+  };
+  if (o.path) {
+    const method = (o.method || 'GET').toUpperCase();
+    return { probed: [await one(method, o.path, o.body)] };
   }
+  const list = [
+    ['GET', '/rest/models'],
+    ['POST', '/rest/models', '{}'],
+    ['POST', '/config', '{}'],
+    ['GET', '/rest/config'],
+    ['POST', '/rest/app-chat/conversations', { pageSize: 0 }],
+  ];
+  const out = [];
+  for (let i = 0; i < list.length; i++) out.push(await one(list[i][0], list[i][1], list[i][2]));
   return { probed: out };
 }

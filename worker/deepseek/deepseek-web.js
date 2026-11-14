@@ -750,7 +750,16 @@ async function handleDoubao(request, env, path, url) {
 
 async function handleGrok(request, env, path, url) {
   if (path === '/health') return jsonResp(grok.health(env), 200, env, request);
-  if (path === '/v1/_probe') return jsonResp(await grok.probe(bearer(request)), 200, env, request);
+  if (path === '/v1/_probe') {
+    return jsonResp(
+      await grok.probe(bearer(request), {
+        path: url.searchParams.get('path') || '',
+        method: url.searchParams.get('method') || 'GET',
+        body: url.searchParams.get('body') || '',
+      }),
+      200, env, request
+    );
+  }
   if (path === '/v1/models' || path === '/models') {
     return jsonResp(
       {
