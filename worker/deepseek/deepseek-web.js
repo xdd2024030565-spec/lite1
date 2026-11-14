@@ -21,6 +21,8 @@ import { route } from './lib/route.js';
 import { jsonResp, corsHeaders } from './lib/http.js';
 import * as doubao from './sites/doubao.js';
 import * as grok from './sites/grok.js';
+import * as qwen from './sites/qwen.js';
+import * as kimi from './sites/kimi.js';
 import * as wasmNs from './sha3_wasm_bg.wasm';
 // Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
 // Node --experimental-wasm-modules：命名空间就是 wasm 的导出对象本身
@@ -537,6 +539,8 @@ function bearer(request) {
 function dispatch(request, env, url, r) {
   if (r.site === 'doubao') return handleDoubao(request, env, r.path, url);
   if (r.site === 'grok') return handleGrok(request, env, r.path, url);
+  if (r.site === 'qwen') return handleSimpleSite(request, env, r.path, url, 'qwen');
+  if (r.site === 'kimi') return handleSimpleSite(request, env, r.path, url, 'kimi');
   return handleDeepseek(request, env, url, r.path);
 }
 
@@ -571,6 +575,8 @@ function deepseekHealth(request, env) {
   const dsOk = tk.length > 0 || headerIsToken;
   const doubaoOk = doubaoToken(env).length > 0;
   const grokOk = grok.health(env).ok;
+  const qwenOk = qwen.health(env).ok;
+  const kimiOk = kimi.health(env).ok;
   if (!hdr) {
     return jsonResp(
       {
@@ -579,6 +585,8 @@ function deepseekHealth(request, env) {
           deepseek: dsOk ? 'ok' : 'no_token',
           doubao: doubaoOk ? 'ok' : 'no_token',
           grok: grokOk ? 'ok' : 'no_token',
+          qwen: qwenOk ? 'ok' : 'no_token',
+          kimi: kimiOk ? 'ok' : 'no_token',
         },
       },
       200, env, request
@@ -597,6 +605,8 @@ function deepseekHealth(request, env) {
         deepseek: { ok: dsOk, kind: dsOk ? 'ok' : 'no_token' },
         doubao: { ok: doubaoOk, kind: doubaoOk ? 'ok' : 'no_token' },
         grok: { ok: grokOk, kind: grokOk ? 'ok' : 'no_token' },
+        qwen: { ok: qwenOk, kind: qwenOk ? 'ok' : 'no_token' },
+        kimi: { ok: kimiOk, kind: kimiOk ? 'ok' : 'no_token' },
       },
     },
     200, env, request
@@ -785,6 +795,63 @@ async function handleGrok(request, env, path, url) {
     return grok.chat(request, env, tokens, url);
   }
   return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
+
+/*
+ * qwen / kimi 这类「只有一次性对话、没有历史会话列表」的站点走同一个处理函数：
+ * /health、/models、空的会话接口、/chat/completions 转发。
+ */
+async function handleSimpleSite(request, env, path, url, siteId) {
+  const mod = siteId === 'qwen' ? qwen : kimi;
+  const envKey = siteId === 'qwen' ? 'QWEN_TOKENS' : 'KIMI_TOKENS';
+  const hdr = bearer(request);
+  const pk = env && env.PROXY_KEY;
+  const secrets = splitTokens(env && env[envKey]);
+  let tokens = secrets.length ? secrets : !pk && hdr ? [hdr] : [];
+
+  if (path === '/health') return jsonResp(mod.health(env), 200, env, request);
+
+  if (path === '/v1/models' || path === '/models') {
+    return jsonResp(
+      {
+        object: 'list',
+        data: mod.models.map(function (m) {
+          return { id: m.id, object: 'model', created: 1700000000, owned_by: siteId + '-web', name: m.name };
+        }),
+      },
+      200, env, request
+    );
+  }
+  // 这两个站没有可绑定的历史会话接口，返回空列表让前端走本机对话
+  if (path === '/v1/sessions') return jsonResp({ object: 'list', data: [] }, 200, env, request);
+  if (path === '/v1/sessions/messages') return jsonResp({ id: '', count: 0, messages: [] }, 200, env, request);
+
+  if (path === '/v1/chat/completions' || path === '/chat/completions') {
+    if (!tokens.length) {
+      return jsonResp(
+        {
+          error: {
+            message:
+              '未配置' + mod.health(env).site + '凭证。两种方式任选：① 反代仓库 secret 里加 ' + envKey +
+              '；② 在设置里把凭证填进「口令」框。',
+            type: 'config',
+          },
+        },
+        503, env, request
+      );
+    }
+    return mod.chat(request, env, tokens, url);
+  }
+  return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
+
+function splitTokens(raw) {
+  return String(raw || '')
+    .split(',')
+    .map(function (s) {
+      return s.trim();
+    })
+    .filter(Boolean);
 }
 
 function grokToken(env) {
