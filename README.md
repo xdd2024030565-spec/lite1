@@ -18,6 +18,15 @@
 - Worker 代理地址: https://wangzhi-proxy.xdd2024030565.workers.dev/
 - 自定义域名: https://nav.yongjiu.ccwu.cc/
 
+## 阅读器（reader.html）
+
+与 lite 仓库共用同一份阅读器界面（2026-11-14 统一升级）：
+
+- 📖 站内入口: https://lite1-3d8c30u.maozi.io/reader.html
+- 📄 纯HTML模式（无需脚本）: https://reader.yongjiu.ccwu.cc/reader/web/list
+
+书库为卡片式书架（统计头 / 分类筛选 / 搜索 / 进度条 / 底部操作单），阅读页为「书名 + 章名」双行顶栏与悬浮底栏，目录带章序号并自动定位当前章，设置面板带实时预览。纯 ES5 + 单文件内联脚本，无需构建，老设备 / 墨水屏可用。
+
 ## AI 助手（ai.html）
 
 内置多提供商对话，支持工具调用、MCP、流式输出。
