@@ -1,306 +1,283 @@
 /*
- * Kimi（kimi.moonshot.cn 网页版）适配器。
+ * Kimi（www.kimi.ai 网页版）适配器。
  *
  * 凭证是网页端 localStorage 里的 refresh_token（数组的话用 . 拼接）。
- * 每次请求先拿它换一个短期 access_token，再建会话、发消息。
+ * 上游已经迁到 Connect RPC：先换 access_token，再按 Connect 帧格式发一次聊天请求。
  *
  * 上游接口：
- *   GET  /api/auth/token/refresh                refresh_token → access_token
- *   GET  /api/user                              取用户 id（放进 X-Traffic-Id）
- *   POST /api/chat                              建会话
- *   POST /api/chat/{id}/completion/stream       发消息（SSE，event: cmpl / data: {...}）
- *   DELETE /api/chat/{id}                       收尾删掉临时会话
+ *   POST https://auth.kimi.ai/api/account.gateway.v1.AuthService/RefreshToken
+ *        {"refresh_token": "..."} → {accessToken|access_token|token}
+ *   POST https://www.kimi.ai/apiv2/kimi.gateway.chat.v1.ChatService/Chat
+ *        application/connect+json，请求体是「5 字节帧头 + JSON」，响应是若干同样格式的帧
  */
 
 import { deltaChunk, finishChunk, doneChunk, errorChunk, randomId } from '../lib/sse.js';
 
-const HOST = 'https://kimi.moonshot.cn';
+const BASE = 'https://www.kimi.ai';
+const AUTH_URL = 'https://auth.kimi.ai/api/account.gateway.v1.AuthService/RefreshToken';
+const CHAT_URL = BASE + '/apiv2/kimi.gateway.chat.v1.ChatService/Chat';
 const MODEL = 'kimi';
+const INNER_MODEL = 'k2d6-chat';
 const UA =
-  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
-  'Chrome/131.0.0.0 Mobile Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+  'Chrome/124.0.0.0 Safari/537.36';
+const HEADER_SIZE = 5;
 
-export const models = [{ id: 'kimi', name: 'Kimi' }];
+export const models = [{ id: MODEL, name: 'Kimi' }];
 
-// access_token 有效期约 15 分钟，按 refresh_token 缓存 8 分钟。
+// access_token 很短命，按 refresh_token 缓存 8 分钟。
 const TOKEN_CACHE = new Map();
 const TOKEN_TTL = 480000;
 
-function baseHeaders(token) {
+function mshHeaders() {
   return {
-    accept: '*/*',
-    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    origin: HOST,
-    referer: HOST + '/',
+    'x-msh-platform': 'web',
+    'x-msh-version': '2.2.0',
+    'x-language': 'zh-CN',
     'user-agent': UA,
-    'content-type': 'application/json',
-    authorization: 'Bearer ' + token,
-    'r-timezone': 'Asia/Shanghai',
+    origin: BASE,
+    referer: BASE + '/',
   };
 }
 
-/* refresh_token 换 access_token，并顺手拿到 userId。 */
-export async function refreshToken(refresh) {
-  const cached = TOKEN_CACHE.get(refresh);
-  if (cached && Date.now() - cached.at < TOKEN_TTL) return cached;
-
-  const r = await fetch(HOST + '/api/auth/token/refresh', {
-    method: 'GET',
-    headers: baseHeaders(refresh),
+/** 把整段对话压成一条 prompt：最后一条是用户输入的正文。 */
+export function mergeMessages(messages) {
+  const list = (messages || []).filter(function (m) {
+    return m && typeof m.content === 'string' && m.content;
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error('换 token 失败（HTTP ' + r.status + '）：' + text.slice(0, 200));
-  let data = null;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error('换 token 返回的不是 JSON：' + text.slice(0, 200));
-  }
-  const access = data && data.access_token;
-  const next = (data && data.refresh_token) || refresh;
-  if (!access) throw new Error('换 token 没拿到 access_token：' + text.slice(0, 200));
+  if (!list.length) return '';
+  const last = list[list.length - 1];
+  if (list.length === 1) return last.content;
+  const head = list.slice(0, -1).map(function (m) {
+    return (m.role === 'assistant' ? '你' : '用户') + '：' + m.content;
+  });
+  return '以下是之前的对话：\n' + head.join('\n') + '\n\n现在请回答：\n' + last.content;
+}
 
-  let userId = '';
-  try {
-    const ur = await fetch(HOST + '/api/user', { method: 'GET', headers: baseHeaders(access) });
-    if (ur.ok) {
-      const u = await ur.json();
-      userId = String((u && u.id) || '');
-    }
-  } catch (e) {
-    /* userId 拿不到就先留空，X-Traffic-Id 可以不发 */
-  }
-
-  const out = { access: access, refresh: next, userId: userId, at: Date.now() };
-  TOKEN_CACHE.set(refresh, out);
+/** Connect 请求帧：1 字节标志位 + 4 字节大端长度 + JSON 正文。 */
+export function encodeFrame(obj) {
+  const body = new TextEncoder().encode(JSON.stringify(obj));
+  const out = new Uint8Array(HEADER_SIZE + body.length);
+  out[0] = 0;
+  new DataView(out.buffer).setUint32(1, body.length, false);
+  out.set(body, HEADER_SIZE);
   return out;
 }
 
-export async function createConversation(access, userId) {
-  const headers = baseHeaders(access);
-  if (userId) headers['x-traffic-id'] = userId;
-  const r = await fetch(HOST + '/api/chat', {
+/** 从缓冲区里切出完整的帧，返回 [事件数组, 剩余字节]。 */
+export function takeFrames(buffer) {
+  const events = [];
+  let buf = buffer;
+  while (buf && buf.length >= HEADER_SIZE) {
+    const flag = buf[0];
+    const len = new DataView(buf.buffer, buf.byteOffset, buf.byteLength).getUint32(1, false);
+    if (buf.length < HEADER_SIZE + len) break;
+    const payload = buf.subarray(HEADER_SIZE, HEADER_SIZE + len);
+    buf = buf.subarray(HEADER_SIZE + len);
+    // 0x02 是流结束的 trailer，没有正文。
+    if (flag === 2 || !len) continue;
+    try {
+      events.push(JSON.parse(new TextDecoder().decode(payload)));
+    } catch (e) {
+      /* 坏帧直接跳过 */
+    }
+  }
+  return [events, buf];
+}
+
+export function buildChatBody(prompt, thinking) {
+  return {
+    scenario: 'SCENARIO_CHAT',
+    tools: [{ type: 'TOOL_TYPE_SEARCH', search: {} }, { type: 'TOOL_TYPE_CRON_JOB' }],
+    options: {
+      thinking: true,
+      enable_plugin: false,
+      reasoning_effort: thinking ? 'REASONING_EFFORT_LOW' : 'REASONING_EFFORT_NONE',
+      model: INNER_MODEL,
+    },
+    message: { role: 'user', blocks: [{ text: { content: prompt } }] },
+  };
+}
+
+/** 帧事件 → 统一的 Delta（content / reasoning / finish / error）。 */
+export function parseEvent(ev) {
+  if (!ev || typeof ev !== 'object') return null;
+  if (ev.heartbeat !== undefined) return null;
+  if (ev.done !== undefined) return { finish: 'stop' };
+  if (ev.error) {
+    const detail = ev.error.details && ev.error.details[0] && ev.error.details[0].debug;
+    const msg =
+      (detail && detail.localizedMessage && detail.localizedMessage.message) ||
+      ev.error.message ||
+      ev.error.code ||
+      '未知错误';
+    return { error: 'Kimi 拒绝了这次请求：' + msg };
+  }
+  const block = ev.block;
+  if (block) {
+    if (block.text && typeof block.text.content === 'string' && block.text.content) {
+      return { content: block.text.content };
+    }
+    if (block.think && typeof block.think.content === 'string' && block.think.content) {
+      return { reasoning: block.think.content };
+    }
+  }
+  return null;
+}
+
+/** 用 refresh_token 换 access_token（带缓存）。 */
+export async function refreshToken(refresh) {
+  const now = Date.now();
+  const hit = TOKEN_CACHE.get(refresh);
+  if (hit && now - hit.at < TOKEN_TTL) return hit.access;
+  const res = await fetch(AUTH_URL, {
     method: 'POST',
-    headers: headers,
-    body: JSON.stringify({
-      enter_method: 'new_chat',
-      is_example: false,
-      kimiplus_id: MODEL,
-      name: '网页聊天',
-    }),
+    headers: Object.assign(
+      { 'content-type': 'application/json', accept: 'application/json', 'connect-protocol-version': '1' },
+      mshHeaders(),
+    ),
+    body: JSON.stringify({ refresh_token: refresh }),
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error('建会话失败（HTTP ' + r.status + '）：' + text.slice(0, 200));
+  const text = await res.text();
   let data = null;
   try {
     data = JSON.parse(text);
   } catch (e) {
-    throw new Error('建会话返回的不是 JSON：' + text.slice(0, 200));
+    throw new Error('换 token 失败（HTTP ' + res.status + '）：' + text.slice(0, 200));
   }
-  if (!data || !data.id) throw new Error('建会话没拿到 id：' + text.slice(0, 200));
-  return data.id;
-}
-
-export function buildChatBody({ messages, model }) {
-  const list = (Array.isArray(messages) ? messages : []).map((m) => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: String(m.content || ''),
-  }));
-  return {
-    kimiplus_id: model === 'kimi-k1' ? 'kimi-k1' : MODEL,
-    messages: list,
-    refs: [],
-    use_math: false,
-    use_research: false,
-    use_search: false,
-    extend: { sidebar: true },
-  };
-}
-
-/* 上游一帧：SSE 里既有 event: 行也有 data: 行，只认 data 里的 JSON。 */
-export function parseEvent(raw) {
-  let s = String(raw || '').trim();
-  if (!s) return null;
-  if (s.indexOf('data:') === 0) s = s.slice(5).trim();
-  if (!s || s.indexOf('event:') === 0 || s === '[DONE]') return null;
-  let chunk = null;
-  try {
-    chunk = JSON.parse(s);
-  } catch (e) {
-    return null;
+  const inner = data && data.data;
+  const access =
+    (data && (data.accessToken || data.access_token || data.token)) ||
+    (inner && (inner.accessToken || inner.access_token || inner.token));
+  if (!access) {
+    const detail =
+      data && data.details && data.details[0] && data.details[0].debug && data.details[0].debug.localizedMessage;
+    const msg = (detail && detail.message) || (data && data.message) || (data && data.code) || '未知错误';
+    throw new Error('Kimi 拒绝了这个 refresh_token：' + msg);
   }
-  if (!chunk || typeof chunk !== 'object') return null;
-  if (chunk.event === 'cmpl' && chunk.text) return { content: String(chunk.text) };
-  if (chunk.event === 'req') return null;
-  if (chunk.event === 'search_plus' && chunk.msg && chunk.msg.type === 'get_res') return null;
-  if (chunk.event === 'length') return null;
-  if (chunk.event === 'all_done') return { finish: 'stop' };
-  if (chunk.event === 'error') return { error: 'Kimi 中断了这次生成，换个说法再试' };
-  return null;
+  TOKEN_CACHE.set(refresh, { access: access, at: now });
+  return access;
 }
 
-function streamChat(upstream, model, access, userId, convId) {
-  const id = randomId();
+/** 把上游的 Connect 帧流翻成 OpenAI chunk。 */
+function streamChat(upstream, model) {
   const reader = upstream.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  let ended = false;
-
-  const cleanup = () => {
-    const headers = baseHeaders(access);
-    if (userId) headers['x-traffic-id'] = userId;
-    fetch(HOST + '/api/chat/' + convId, { method: 'DELETE', headers: headers }).catch(() => {});
-  };
-
-  return new ReadableStream({
-    start(controller) {
-      const enc = new TextEncoder();
-      const push = (s) => {
-        try {
-          controller.enqueue(enc.encode(s));
-        } catch (e) {
-          /* 下游已断开 */
-        }
-      };
-      const finish = () => {
-        if (ended) return;
-        ended = true;
-        push(finishChunk(id, model, 'stop'));
-        push(doneChunk());
-        try {
+  const id = randomId('chatcmpl-');
+  const enc = new TextEncoder();
+  let buf = new Uint8Array(0);
+  let finished = false;
+  return new Response(
+    new ReadableStream({
+      async pull(controller) {
+        const chunk = await reader.read();
+        if (chunk.done) {
+          if (!finished) controller.enqueue(enc.encode(finishChunk(id, model, 'stop') + doneChunk()));
           controller.close();
-        } catch (e) {
-          /* 已关闭 */
-        }
-        cleanup();
-      };
-      const fail = (msg) => {
-        if (ended) return;
-        ended = true;
-        push(errorChunk(msg));
-        push(doneChunk());
-        try {
-          controller.close();
-        } catch (e) {
-          /* 已关闭 */
-        }
-        cleanup();
-      };
-      const handleLine = (line) => {
-        const s = String(line || '').trim();
-        if (!s || s === '[DONE]') return;
-        const ev = parseEvent(s);
-        if (!ev) return;
-        if (ev.error) {
-          fail(ev.error);
           return;
         }
-        if (ev.content) push(deltaChunk(id, model, { content: ev.content }));
-        if (ev.finish) finish();
-      };
-      const pump = () => {
-        reader.read().then((r) => {
-          if (r.done) {
-            if (buf.trim()) handleLine(buf);
-            finish();
+        const merged = new Uint8Array(buf.length + chunk.value.length);
+        merged.set(buf, 0);
+        merged.set(chunk.value, buf.length);
+        const parsed = takeFrames(merged);
+        buf = parsed[1];
+        let out = '';
+        parsed[0].forEach(function (ev) {
+          const d = parseEvent(ev);
+          if (!d) return;
+          if (d.error) {
+            out += errorChunk(d.error) + doneChunk();
+            finished = true;
             return;
           }
-          buf += decoder.decode(r.value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop() || '';
-          for (const ln of lines) handleLine(ln);
-          if (!ended) pump();
-        }).catch((e) => fail('读取 Kimi 响应失败：' + (e && e.message ? e.message : String(e))));
-      };
-      pump();
-    },
-  });
+          if (d.reasoning) out += deltaChunk(id, model, { reasoning_content: d.reasoning });
+          if (d.content) out += deltaChunk(id, model, { content: d.content });
+          if (d.finish) {
+            out += finishChunk(id, model, d.finish) + doneChunk();
+            finished = true;
+          }
+        });
+        if (out) controller.enqueue(enc.encode(out));
+      },
+      cancel(reason) {
+        reader.cancel(reason);
+      },
+    }),
+    { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' } },
+  );
 }
 
 export async function chat(request, env, tokens) {
-  let body = {};
+  const token = (tokens || []).find(function (t) {
+    return !!t;
+  });
+  if (!token) {
+    return new Response(JSON.stringify({ error: { message: '还没有配置 Kimi 凭证：把 refresh_token 写进 KIMI_TOKENS' } }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  let body;
   try {
     body = await request.json();
   } catch (e) {
-    body = {};
-  }
-  const refresh = tokens && tokens[0];
-  if (!refresh) {
-    return new Response(
-      JSON.stringify({ error: { message: '还没有配置 Kimi 凭证：请在反代仓库 secret 里加 KIMI_TOKENS，或在前端设置里填 refresh_token' } }),
-      { status: 503, headers: { 'content-type': 'application/json' } }
-    );
-  }
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  if (!messages.length) {
-    return new Response(JSON.stringify({ error: { message: '消息为空' } }), {
+    return new Response(JSON.stringify({ error: { message: '请求体不是合法 JSON' } }), {
       status: 400,
       headers: { 'content-type': 'application/json' },
     });
   }
-
-  let tk = null;
-  try {
-    tk = await refreshToken(refresh);
-  } catch (e) {
-    return new Response(
-      JSON.stringify({ error: { message: 'Kimi 换 token 失败，多半是 refresh_token 失效了：' + (e && e.message ? e.message : String(e)) } }),
-      { status: 502, headers: { 'content-type': 'application/json' } }
-    );
+  const prompt = mergeMessages(body.messages);
+  if (!prompt) {
+    return new Response(JSON.stringify({ error: { message: '没有可发送的内容' } }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
   }
-
-  let convId = '';
+  let access;
   try {
-    convId = await createConversation(tk.access, tk.userId);
+    access = await refreshToken(token);
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: { message: 'Kimi 建会话失败：' + (e && e.message ? e.message : String(e)) } }),
-      { status: 502, headers: { 'content-type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: { message: e.message } }), {
+      status: 502,
+      headers: { 'content-type': 'application/json' },
+    });
   }
-
-  const headers = baseHeaders(tk.access);
-  if (tk.userId) headers['x-traffic-id'] = tk.userId;
-  headers.referer = HOST + '/chat/' + convId;
-
-  let upstream = null;
+  let upstream;
   try {
-    upstream = await fetch(HOST + '/api/chat/' + convId + '/completion/stream', {
+    upstream = await fetch(CHAT_URL, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(buildChatBody({ messages: messages, model: body.model })),
+      headers: Object.assign(
+        {
+          authorization: 'Bearer ' + access,
+          'content-type': 'application/connect+json',
+          accept: 'application/connect+json',
+          'connect-protocol-version': '1',
+        },
+        mshHeaders(),
+      ),
+      body: encodeFrame(buildChatBody(prompt, !!body.thinking)),
     });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: { message: '连接 Kimi 失败：' + (e && e.message ? e.message : String(e)) } }),
-      { status: 502, headers: { 'content-type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: { message: '连接 Kimi 失败：' + e.message } }), {
+      status: 502,
+      headers: { 'content-type': 'application/json' },
+    });
   }
-
-  if (!upstream.ok) {
-    const text = await upstream.text();
+  if (!upstream.ok || !upstream.body) {
+    const text = await upstream.text().catch(function () {
+      return '';
+    });
     return new Response(
       JSON.stringify({
-        error: {
-          message: 'Kimi 返回 HTTP ' + upstream.status + '，多半是 refresh_token 失效或被风控拦下。' + text.slice(0, 300),
-        },
+        error: { message: 'Kimi 返回 HTTP ' + upstream.status + '，多半是登录态失效或被风控拦下。' + text.slice(0, 300) },
       }),
-      { status: 502, headers: { 'content-type': 'application/json' } }
+      { status: 502, headers: { 'content-type': 'application/json' } },
     );
   }
-
-  return new Response(streamChat(upstream, MODEL, tk.access, tk.userId, convId), {
-    headers: {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-cache',
-      connection: 'keep-alive',
-    },
-  });
+  return streamChat(upstream, body.model || MODEL);
 }
 
+/** 只读配置，不联网（前端每次切站都会调）。 */
 export function health(env) {
-  const list = String((env && env.KIMI_TOKENS) || '')
-    .split(',')
-    .filter(Boolean);
-  return { ok: list.length > 0, site: 'kimi', kind: list.length ? 'ok' : 'no_token' };
+  const has = !!(env && env.KIMI_TOKENS);
+  return { ok: has, site: 'kimi', kind: has ? 'ok' : 'no_token' };
 }
