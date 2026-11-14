@@ -70,17 +70,14 @@ jobs:
           # Grok 的 sso 以普通变量注入：CI token 没有 Workers secret 的写权限（7003），
           # 但随 deploy 一起上传的变量同样能生效。值只来自仓库 secret，不落仓库。
           if [ -n "$GROK_TOKENS" ]; then
-            python3 - <<'PY'
-import os
-src = open('wrangler.toml', encoding='utf-8').read()
-val = os.environ['GROK_TOKENS'].strip()
-val = val.replace('\\', '\\\\').replace('"', '\\"')
-if '[vars]' in src:
-    src = src.replace('[vars]', '[vars]\nGROK_TOKENS = "' + val + '"', 1)
-else:
-    src = src + '\n[vars]\nGROK_TOKENS = "' + val + '"\n'
-open('wrangler.ci.toml', 'w', encoding='utf-8').write(src)
-PY
+            ESC=$(printf '%s' "$GROK_TOKENS" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+            awk -v v="$ESC" '{ print } /^\[vars\]/{ printf "GROK_TOKENS = \"%s\"\n", v }' \
+              wrangler.toml > wrangler.ci.toml
+            if ! grep -q '^GROK_TOKENS = ' wrangler.ci.toml; then
+              rm -f wrangler.ci.toml
+              echo "wrangler.toml 里没有 [vars] 段，无法注入 Grok 凭证"
+              exit 1
+            fi
             CONFIG_ARGS="--config wrangler.ci.toml"
             echo "已注入 GROK_TOKENS（来自仓库 secret，日志不打印值）"
           fi
