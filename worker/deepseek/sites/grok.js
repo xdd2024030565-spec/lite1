@@ -301,3 +301,53 @@ export function health(env) {
   const has = !!(env && env.GROK_TOKENS);
   return { ok: has, site: 'grok', kind: has ? 'ok' : 'no_token' };
 }
+
+/*
+ * 临时诊断：用调用方自己带来的 sso 去问 grok.com 几个只读元信息接口，
+ * 把状态码和响应片段回给运维判断（不触发任何生成，不消耗额度）。
+ * 确认模型清单后就删掉这段。
+ */
+const PROBE_TARGETS = [
+  { method: 'GET', path: '/rest/models' },
+  { method: 'GET', path: '/rest/app-chat/models' },
+  { method: 'POST', path: '/rest/app-chat/list-available-v2', body: {} },
+  { method: 'GET', path: '/rest/user-settings' },
+  { method: 'GET', path: '/rest/app-chat/user-settings' },
+  { method: 'POST', path: '/rest/app-chat/conversations', body: { pageSize: 1 } },
+];
+
+export async function probe(token) {
+  if (!token) return { error: '需要在请求头带 Authorization: Bearer <grok sso>' };
+  const out = [];
+  for (let i = 0; i < PROBE_TARGETS.length; i++) {
+    const t = PROBE_TARGETS[i];
+    const headers = {
+      accept: '*/*',
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      origin: HOST,
+      referer: HOST + '/',
+      'user-agent': UA,
+      'x-statsig-id': DEFAULT_STATSIG,
+      'x-xai-request-id': uuid(),
+      cookie: 'sso=' + token,
+    };
+    if (t.body) headers['content-type'] = 'application/json';
+    try {
+      const r = await fetch(HOST + t.path, {
+        method: t.method,
+        headers: headers,
+        body: t.body ? JSON.stringify(t.body) : undefined,
+      });
+      let text = '';
+      try {
+        text = (await r.text()).slice(0, 400);
+      } catch (e) {
+        text = '';
+      }
+      out.push({ path: t.path, status: r.status, contentType: r.headers.get('content-type'), text: text });
+    } catch (e) {
+      out.push({ path: t.path, error: String(e && e.message ? e.message : e).slice(0, 200) });
+    }
+  }
+  return { probed: out };
+}
