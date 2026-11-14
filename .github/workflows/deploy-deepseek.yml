@@ -63,14 +63,41 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID || 'b9865b22dc4d64174713371c293e700f' }}
+          GROK_TOKENS: ${{ secrets.GROK_TOKENS }}
         run: |
           set -o pipefail
-          wrangler deploy --name deepseek-web 2>&1 | tee /tmp/deploy.log
+          CONFIG_ARGS=""
+          # Grok 的 sso 以普通变量注入：CI token 没有 Workers secret 的写权限（7003），
+          # 但随 deploy 一起上传的变量同样能生效。值只来自仓库 secret，不落仓库。
+          if [ -n "$GROK_TOKENS" ]; then
+            python3 - <<'PY'
+import os
+src = open('wrangler.toml', encoding='utf-8').read()
+val = os.environ['GROK_TOKENS'].strip()
+val = val.replace('\\', '\\\\').replace('"', '\\"')
+if '[vars]' in src:
+    src = src.replace('[vars]', '[vars]\nGROK_TOKENS = "' + val + '"', 1)
+else:
+    src = src + '\n[vars]\nGROK_TOKENS = "' + val + '"\n'
+open('wrangler.ci.toml', 'w', encoding='utf-8').write(src)
+PY
+            CONFIG_ARGS="--config wrangler.ci.toml"
+            echo "已注入 GROK_TOKENS（来自仓库 secret，日志不打印值）"
+          fi
+          mask='s/(GROK_TOKENS[^:]*:[[:space:]]*")[^"]*/\1***/g'
+          if ! wrangler deploy --name deepseek-web $CONFIG_ARGS > /tmp/deploy.log 2>&1; then
+            rm -f wrangler.ci.toml
+            echo "部署失败（已脱敏）："
+            sed -E "$mask" /tmp/deploy.log | tail -n 30
+            exit 1
+          fi
+          rm -f wrangler.ci.toml
+          sed -E "$mask" /tmp/deploy.log | tail -n 25
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ Worker 已部署" >> $GITHUB_STEP_SUMMARY
           echo "部署日志末尾：" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 15 /tmp/deploy.log >> $GITHUB_STEP_SUMMARY
+          sed -E "$mask" /tmp/deploy.log | tail -n 15 >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Set token secret (optional)
