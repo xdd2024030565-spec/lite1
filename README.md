@@ -108,7 +108,7 @@
 网页版模型下点「＋ 新对话」先弹出会话列表（`GET /v1/sessions`，取该账号最近 50 条，
 带 `[DSH#xxx]` 标记的会高亮为「固定」）。选中后可：
 
-- **导入最近 N 条作上下文**（`GET /v1/sessions/messages?id=…&limit=N`，默认 5、上限 20），
+- **导入最近 N 条作上下文**（`GET /v1/sessions/messages?id=…&limit=N`，默认 5、上限 200），
   只取 `RESPONSE` 片段作正文、`THINK` 单独放 `reasoning`，不会把思考混进黑历史；
 - **该对话绑定这个上游会话**：之后每条消息都带 `pinned_session_id`，Worker 无条件钉死它，
   消息写回同一个网页版对话（实测会话数不变、新消息确实落进去）；
@@ -122,3 +122,23 @@ cd worker/deepseek
 npx wrangler secret put DEEPSEEK_TOKENS   # 网页版 token，多个用逗号分隔
 npx wrangler deploy
 ```
+
+## 多站点路由（2026-11-14）
+
+同一个 Worker（`deepseek-web`）现在按站点前缀路由，供前端「网页兼容版」切站使用：
+
+| 路径 | 上游 | 说明 |
+|---|---|---|
+| `/deepseek/v1/*` | chat.deepseek.com | 与老路径完全等价 |
+| `/doubao/v1/*` | www.doubao.com | 豆包网页版（单轮拼多轮，流式翻译） |
+| `/v1/*`、`/chat/completions` | chat.deepseek.com | legacy，等价于 `/deepseek/v1/*` |
+| `/health` | — | 不带口令只回 `{ok, sites}`；带 `Authorization` 才回 token 数量等细节 |
+
+- 路由拆分在 `worker/deepseek/lib/route.js`，CORS/JSON 响应在 `lib/http.js`，
+  OpenAI chunk 输出在 `lib/sse.js`，token 轮询在 `lib/pool.js`
+- 豆包适配器在 `worker/deepseek/sites/doubao.js`：请求 `POST /samantha/chat/completion`，
+  Cookie 用 `sessionid`，SSE 的 `event_type=2001` 翻成 `choices[0].delta.content`，
+  `2003` / `is_finish` 收尾；图片事件（`content_type=2074`）暂不渲染
+- 豆包凭证：`wrangler secret put DOUBAO_TOKENS`（多个用逗号分隔），或前端在设置里填 `sessionid`
+- 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
+  （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、鉴权与健康检查）

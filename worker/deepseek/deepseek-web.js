@@ -17,6 +17,9 @@
 //   wrangler deploy
 
 
+import { route } from './lib/route.js';
+import { jsonResp, corsHeaders } from './lib/http.js';
+import * as doubao from './sites/doubao.js';
 import * as wasmNs from './sha3_wasm_bg.wasm';
 // Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
 // Node --experimental-wasm-modules：命名空间就是 wasm 的导出对象本身
@@ -192,7 +195,7 @@ async function acquireSession(token, opts) {
 
   // 前端指定了固定会话（用户在「新建对话」里选了某个上游会话）：
   // 这是**绑定**语义，必须无条件生效——不能因为用户没开“单次对话”就失效，
-  // 否则新消息会落到别的会话里，用户选的那个对话根本没被写入。
+  // 否则新消息会写到别的上游对话里，选中的那个对话根本没被写入。
   const pin = String((opts && opts.pin) || '').trim();
   if (pin) return { id: pin, lastUsed: now, needMark: false };
 
@@ -510,186 +513,229 @@ function sseChunk(obj) {
   return 'data: ' + JSON.stringify(obj) + '\n\n';
 }
 
-// ===== CORS =====
-function corsHeaders(env, request) {
-  // 关键：Access-Control-Allow-Origin 只能是「*」或**恰好一个**来源。
-  // 早先这里直接把 ALLOW_ORIGIN 那一整串（逗号分隔）回给浏览器，
-  // 浏览器判定为非法值 → 前端所有请求都会被 CORS 拦掉（curl 不看 CORS 所以测不出来）。
-  const raw = String((env && env.ALLOW_ORIGIN) || '*').trim();
-  let allow = '*';
-  if (raw !== '*') {
-    const list = raw.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
-    const origin = (request && request.headers && request.headers.get('Origin')) || '';
-    allow = (origin && list.indexOf(origin) >= 0) ? origin : (list[0] || '*');
-  }
-  return {
-    'Access-Control-Allow-Origin': allow,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-DS-PoW-Response',
-    'Access-Control-Max-Age': '86400',
-    // 允许来源随请求头变化，必须声明 Vary，避免 CDN 缓存串站
-    Vary: 'Origin',
-  };
-}
-
-function jsonResp(obj, status, env, request) {
-  return new Response(JSON.stringify(obj), {
-    status: status || 200,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(env, request) },
-  });
-}
-
 // ===== 主处理 =====
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    let path = url.pathname.replace(/\/+$/, '');
-    path = path.replace(/^\/dsweb/, '') || '/';
-
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(env, request) });
     }
-
-    // 健康检查：放在鉴权之前，方便排障
-    if (path === '/health' || path === '') {
-      const tk = loadTokens(env);
-      const hdr = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-      const pk = env && env.PROXY_KEY;
-      const headerIsToken = !!hdr && (!pk || hdr !== pk);
-      return jsonResp(
-        {
-          status: 'ok',
-          service: 'deepseek-web',
-          runtime: 'wasm-sha3',
-          tokens: tk.length,
-          tokenSource: tk.length ? 'secret' : headerIsToken ? 'header' : 'none',
-          proxyKeyRequired: !!pk,
-          model: DEFAULT_MODEL,
-        },
-        200,
-        env, request
-      );
-    }
-
-    // 访问口令校验（设置了 PROXY_KEY 才启用）
-    const auth = request.headers.get('Authorization') || '';
-    const clientKey = auth.replace(/^Bearer\s+/i, '').trim();
-    const proxyKey = env && env.PROXY_KEY;
-    if (proxyKey && clientKey !== proxyKey) {
-      return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env, request);
-    }
-
-    // 模型列表：纯静态数据，不需要 token。
-    // （以前 token 检查排在路由前面，导致没配 token 时连 /v1/models 都返回 503，
-    //   前端和 OpenAI SDK 探活时会误判成「服务不可用」。）
-    if (path === '/v1/models' || path === '/models') {
-      return jsonResp(
-        {
-          object: 'list',
-          data: [
-            { id: DEFAULT_MODEL, object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
-            { id: 'deepseek-reasoner', object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
-          ],
-        },
-        200,
-        env, request
-      );
-    }
-
-    // 对话：只有这条路径需要 token
-    // ===== 固定对话选择：列出上游会话 =====
-    // 用途：前端「新建对话」时可选「绑定到某个已存在的网页版会话」，
-    // 只拉取该会话最近若干轮作为上下文，之后的对话仍留在浏览器本地。
-    if (path === '/v1/sessions') {
-      const tokens = loadTokens(env);
-      const token = tokens[0];
-      if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
-      try {
-        const ctx = makeUpstreamCtx(token);
-        const list = await ctx.listSessions();
-        const items = list.slice(0, 50).map(function (it) {
-          return {
-            id: it.id,
-            title: it.title || '(无标题)',
-            pinned: !!it.pinned,
-            updated_at: it.updated_at || 0,
-            // 带 [DSH#xxx] 标记的是本服务给固定会话贴的标记，前端可高亮
-            tagged: typeof it.title === 'string' && it.title.indexOf('[DSH#') >= 0,
-          };
-        });
-        return jsonResp({ object: 'list', data: items }, 200, env, request);
-      } catch (e) {
-        return jsonResp({ error: { message: '拉取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
-      }
-    }
-
-    // ===== 固定对话选择：读取某个会话的消息（供导入前几条）=====
-    // query: id=会话id&limit=N（默认 5，最多 20）
-    if (path === '/v1/sessions/messages') {
-      const tokens = loadTokens(env);
-      const token = tokens[0];
-      if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
-      const sid = url.searchParams.get('id') || '';
-      if (!sid) return jsonResp({ error: { message: '缺少 id' } }, 400, env, request);
-      let limit = parseInt(url.searchParams.get('limit') || '5', 10);
-      if (isNaN(limit) || limit <= 0) limit = 5;
-      if (limit > 20) limit = 20;
-      try {
-        const ctx = makeUpstreamCtx(token);
-        const msgs = await ctx.historyMessages(sid);
-        // 只取最近 limit 条，且过滤 TIP / 系统提示等非对话片段
-        const picked = [];
-        for (let i = msgs.length - 1; i >= 0 && picked.length < limit; i--) {
-          const m = msgs[i];
-          if (!m) continue;
-          const role = m.role === 'USER' ? 'user' : m.role === 'ASSISTANT' ? 'assistant' : null;
-          if (!role) continue;
-          // 只取 RESPONSE 片段作为正文；THINK 是思考过程，混进正文会污染导入内容
-          const frags = m.fragments || [];
-          const resp = frags.filter(function (f) { return f && f.type === 'RESPONSE'; })
-            .map(function (f) { return f.content || ''; }).join('').trim();
-          const think = frags.filter(function (f) { return f && f.type === 'THINK'; })
-            .map(function (f) { return f.content || ''; }).join('').trim();
-          // 老数据可能没有 RESPONSE 类型，退化取所有非 TIP 片段
-          const text = resp || (frags.filter(function (f) {
-            return f && f.type !== 'TIP' && f.type !== 'THINK' && typeof f.content === 'string';
-          }).map(function (f) { return f.content; }).join('').trim());
-          if (!text) continue;
-          picked.unshift({ role: role, content: text, reasoning: think || undefined, message_id: m.message_id });
-        }
-        return jsonResp({ id: sid, count: picked.length, messages: picked }, 200, env, request);
-      } catch (e) {
-        return jsonResp({ error: { message: '读取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
-      }
-    }
-
-    if (path === '/v1/chat/completions' || path === '/chat/completions') {
-      // token 有两个来源，按优先级取：
-      //   1) Worker secret DEEPSEEK_TOKENS —— 推荐，token 不落到浏览器
-      //   2) 请求头 Authorization: Bearer <网页版 token> —— 没配 secret 时兜底，
-      //      在前端把 token 填进该提供商的「API Key」即可直接用，不必重新部署
-      let tokens = loadTokens(env);
-      if (!tokens.length && clientKey && !proxyKey) tokens = [clientKey];
-      if (!tokens.length) {
-        return jsonResp(
-          {
-            error: {
-              message:
-                '未配置 DeepSeek token。两种方式任选：① wrangler secret put DEEPSEEK_TOKENS；' +
-                '② 在前端把网页版 token 填进「DeepSeek 网页版」提供商的 API Key 字段。',
-              type: 'config',
-            },
-          },
-          503,
-          env, request
-        );
-      }
-      return handleChat(request, env, tokens);
-    }
-
-    return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+    const url = new URL(request.url);
+    return dispatch(request, env, url, route(normalizePath(url.pathname)));
   },
 };
+
+function normalizePath(p) {
+  const trimmed = String(p || '').replace(/\/+$/, '').replace(/^\/dsweb/, '');
+  return trimmed || '/';
+}
+
+function bearer(request) {
+  return (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+}
+
+function dispatch(request, env, url, r) {
+  if (r.site === 'doubao') return handleDoubao(request, env, r.path, url);
+  return handleDeepseek(request, env, url, r.path);
+}
+
+function handleDeepseek(request, env, url, path) {
+  // 健康检查放在鉴权之前，方便排障
+  if (path === '/health' || path === '') return deepseekHealth(request, env);
+
+  const clientKey = bearer(request);
+  const proxyKey = env && env.PROXY_KEY;
+  if (proxyKey && clientKey !== proxyKey) {
+    return jsonResp({ error: { message: 'Unauthorized: PROXY_KEY 不匹配', type: 'auth' } }, 401, env, request);
+  }
+
+  if (path === '/v1/models' || path === '/models') return deepseekModels(env, request);
+  if (path === '/v1/sessions') return deepseekSessions(env, request);
+  if (path === '/v1/sessions/messages') return deepseekSessionMessages(env, request, url);
+  if (path === '/v1/chat/completions' || path === '/chat/completions') {
+    return deepseekChat(request, env, clientKey, proxyKey);
+  }
+  return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
+
+/*
+ * 健康检查：未带口令只回「能用 / 不能用」，不暴露 token 数量与来源；
+ * 带了口令才给细节。
+ */
+function deepseekHealth(request, env) {
+  const tk = loadTokens(env);
+  const hdr = bearer(request);
+  const pk = env && env.PROXY_KEY;
+  const headerIsToken = !!hdr && (!pk || hdr !== pk);
+  const dsOk = tk.length > 0 || headerIsToken;
+  const doubaoOk = doubaoToken(env).length > 0;
+  if (!hdr) {
+    return jsonResp(
+      { ok: dsOk, sites: { deepseek: dsOk ? 'ok' : 'no_token', doubao: doubaoOk ? 'ok' : 'no_token' } },
+      200, env, request
+    );
+  }
+  return jsonResp(
+    {
+      ok: dsOk,
+      service: 'deepseek-web',
+      runtime: 'wasm-sha3',
+      tokens: tk.length,
+      tokenSource: tk.length ? 'secret' : headerIsToken ? 'header' : 'none',
+      proxyKeyRequired: !!pk,
+      model: DEFAULT_MODEL,
+      sites: {
+        deepseek: { ok: dsOk, kind: dsOk ? 'ok' : 'no_token' },
+        doubao: { ok: doubaoOk, kind: doubaoOk ? 'ok' : 'no_token' },
+      },
+    },
+    200, env, request
+  );
+}
+
+/* 模型列表：纯静态数据，不需要 token（探活不该因为没配 token 就 503） */
+function deepseekModels(env, request) {
+  return jsonResp(
+    {
+      object: 'list',
+      data: [
+        { id: DEFAULT_MODEL, object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
+        { id: 'deepseek-reasoner', object: 'model', created: 1700000000, owned_by: 'deepseek-web' },
+      ],
+    },
+    200, env, request
+  );
+}
+
+/* 列出上游对话，供前端「绑定已有对话」使用 */
+async function deepseekSessions(env, request) {
+  const token = loadTokens(env)[0];
+  if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
+  try {
+    const ctx = makeUpstreamCtx(token);
+    const list = await ctx.listSessions();
+    const items = list.slice(0, 50).map(function (it) {
+      return {
+        id: it.id,
+        title: it.title || '(无标题)',
+        pinned: !!it.pinned,
+        updated_at: it.updated_at || 0,
+        // 带 [DSH#xxx] 标记的是本服务给固定对话贴的标记，前端可高亮
+        tagged: typeof it.title === 'string' && it.title.indexOf('[DSH#') >= 0,
+      };
+    });
+    return jsonResp({ object: 'list', data: items }, 200, env, request);
+  } catch (e) {
+    return jsonResp({ error: { message: '拉取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
+  }
+}
+
+/* 读取某个上游对话最近若干条消息（query: id=对话id&limit=N，默认 5，最多 200） */
+async function deepseekSessionMessages(env, request, url) {
+  const token = loadTokens(env)[0];
+  if (!token) return jsonResp({ error: { message: '未配置 token' } }, 503, env, request);
+  const sid = url.searchParams.get('id') || '';
+  if (!sid) return jsonResp({ error: { message: '缺少 id' } }, 400, env, request);
+  let limit = parseInt(url.searchParams.get('limit') || '5', 10);
+  if (isNaN(limit) || limit <= 0) limit = 5;
+  if (limit > 200) limit = 200;
+  try {
+    const ctx = makeUpstreamCtx(token);
+    const msgs = await ctx.historyMessages(sid);
+    return jsonResp({ id: sid, messages: pickHistory(msgs, limit) }, 200, env, request);
+  } catch (e) {
+    return jsonResp({ error: { message: '读取会话失败: ' + (e && e.message ? e.message : e) } }, 502, env, request);
+  }
+}
+
+/* 取最近 limit 条对话，正文只拼 RESPONSE 片段，THINK 单独放 reasoning */
+function pickHistory(msgs, limit) {
+  const picked = [];
+  for (let i = msgs.length - 1; i >= 0 && picked.length < limit; i--) {
+    const m = msgs[i];
+    if (!m) continue;
+    const role = m.role === 'USER' ? 'user' : m.role === 'ASSISTANT' ? 'assistant' : null;
+    if (!role) continue;
+    const frags = m.fragments || [];
+    const resp = frags.filter(function (f) { return f && f.type === 'RESPONSE'; })
+      .map(function (f) { return f.content || ''; }).join('').trim();
+    const think = frags.filter(function (f) { return f && f.type === 'THINK'; })
+      .map(function (f) { return f.content || ''; }).join('').trim();
+    // 老数据可能没有 RESPONSE 类型，退化取所有非 TIP 片段
+    const text = resp || (frags.filter(function (f) {
+      return f && f.type !== 'TIP' && f.type !== 'THINK' && typeof f.content === 'string';
+    }).map(function (f) { return f.content; }).join('').trim());
+    if (!text) continue;
+    picked.unshift({ role: role, content: text, reasoning: think || undefined, message_id: m.message_id });
+  }
+  return { count: picked.length, messages: picked };
+}
+
+/* 对话：token 优先取 secret，其次请求头兜底（没设 PROXY_KEY 时才认请求头） */
+function deepseekChat(request, env, clientKey, proxyKey) {
+  let tokens = loadTokens(env);
+  if (!tokens.length && clientKey && !proxyKey) tokens = [clientKey];
+  if (!tokens.length) {
+    return jsonResp(
+      {
+        error: {
+          message:
+            '未配置 DeepSeek token。两种方式任选：① wrangler secret put DEEPSEEK_TOKENS；' +
+            '② 在前端把网页版 token 填进「DeepSeek 网页版」提供商的 API Key 字段。',
+          type: 'config',
+        },
+      },
+      503, env, request
+    );
+  }
+  return handleChat(request, env, tokens);
+}
+
+// ===== 豆包站点 =====
+function doubaoToken(env) {
+  const raw = String((env && env.DOUBAO_TOKENS) || '').trim();
+  return raw ? raw.split(',').map(function (x) { return x.trim(); }).filter(Boolean) : [];
+}
+
+async function handleDoubao(request, env, path, url) {
+  if (path === '/health') {
+    const ok = doubaoToken(env).length > 0 || !!((request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim());
+    return jsonResp({ ok: ok, site: 'doubao', kind: ok ? 'ok' : 'no_token' }, 200, env, request);
+  }
+  if (path === '/v1/models' || path === '/models') {
+    return jsonResp(
+      {
+        object: 'list',
+        data: doubao.models.map(function (m) {
+          return { id: m.id, object: 'model', created: 1700000000, owned_by: 'doubao-web', name: m.name };
+        }),
+      },
+      200, env, request
+    );
+  }
+  // 豆包网页版暂不支持「绑定已有会话」，返回空列表让前端走本机对话
+  if (path === '/v1/sessions') return jsonResp({ object: 'list', data: [] }, 200, env, request);
+  if (path === '/v1/sessions/messages') return jsonResp({ id: '', count: 0, messages: [] }, 200, env, request);
+
+  if (path === '/v1/chat/completions' || path === '/chat/completions') {
+    const hdr = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+    const pk = env && env.PROXY_KEY;
+    let tokens = doubaoToken(env);
+    if (!tokens.length && hdr && !pk) tokens = [hdr];
+    if (!tokens.length) {
+      return jsonResp(
+        {
+          error: {
+            message: '未配置豆包凭证。两种方式任选：① wrangler secret put DOUBAO_TOKENS；② 在设置里填豆包 Cookie 中的 sessionid。',
+            type: 'config',
+          },
+        },
+        503, env, request
+      );
+    }
+    return doubao.chat(request, env, tokens, url);
+  }
+  return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
+}
 
 async function handleChat(request, env, tokens) {
   let body;
@@ -740,7 +786,7 @@ async function handleChat(request, env, tokens) {
       const needMark = !!sess.needMark;
       // 增量模式的 parent 必须持久：直接从上游历史读最后一条 ASSISTANT 的 message_id。
       // 绑定固定会话（pin）时也必须读：往已存在的会话追加消息要挂到它最后一条上，
-      // 否则上游会把它当成孤立消息，甚至落到别的会话里。
+      // 否则上游会把它当成孤立消息，甚至写到别的上游对话里。
       let parentId = null;
       if (incremental || pin) {
         parentId = await ctx.lastAssistantId(sid);
