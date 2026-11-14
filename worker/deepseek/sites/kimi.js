@@ -189,49 +189,47 @@ export async function refreshToken(refresh) {
 
 /** 把上游的 Connect 帧流翻成 OpenAI chunk。 */
 function streamChat(upstream, model) {
-  const reader = upstream.body.getReader();
   const id = randomId('chatcmpl-');
   const enc = new TextEncoder();
   let buf = new Uint8Array(0);
   let finished = false;
-  return new Response(
-    new ReadableStream({
-      async pull(controller) {
-        const chunk = await reader.read();
-        if (chunk.done) {
-          if (!finished) controller.enqueue(enc.encode(finishChunk(id, model, 'stop') + doneChunk()));
-          controller.close();
+  let closed = false;
+
+  const mirror = new TransformStream({
+    transform(chunk, controller) {
+      if (closed) return;
+      const merged = new Uint8Array(buf.length + chunk.length);
+      merged.set(buf, 0);
+      merged.set(chunk, buf.length);
+      const parsed = takeFrames(merged);
+      buf = parsed[1];
+      let out = '';
+      parsed[0].forEach(function (ev) {
+        const d = parseEvent(ev);
+        if (!d) return;
+        if (d.error) {
+          out += errorChunk(d.error) + doneChunk();
+          finished = true;
           return;
         }
-        const merged = new Uint8Array(buf.length + chunk.value.length);
-        merged.set(buf, 0);
-        merged.set(chunk.value, buf.length);
-        const parsed = takeFrames(merged);
-        buf = parsed[1];
-        let out = '';
-        parsed[0].forEach(function (ev) {
-          const d = parseEvent(ev);
-          if (!d) return;
-          if (d.error) {
-            out += errorChunk(d.error) + doneChunk();
-            finished = true;
-            return;
-          }
-          if (d.reasoning) out += deltaChunk(id, model, { reasoning_content: d.reasoning });
-          if (d.content) out += deltaChunk(id, model, { content: d.content });
-          if (d.finish) {
-            out += finishChunk(id, model, d.finish) + doneChunk();
-            finished = true;
-          }
-        });
-        if (out) controller.enqueue(enc.encode(out));
-      },
-      cancel(reason) {
-        reader.cancel(reason);
-      },
-    }),
-    { headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' } },
-  );
+        if (d.reasoning) out += deltaChunk(id, model, { reasoning_content: d.reasoning });
+        if (d.content) out += deltaChunk(id, model, { content: d.content });
+        if (d.finish) {
+          out += finishChunk(id, model, d.finish) + doneChunk();
+          finished = true;
+        }
+      });
+      if (out) controller.enqueue(enc.encode(out));
+    },
+    flush(controller) {
+      if (closed) return;
+      if (!finished) controller.enqueue(enc.encode(finishChunk(id, model, 'stop') + doneChunk()));
+    },
+  });
+
+  return new Response(upstream.body.pipeThrough(mirror), {
+    headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' },
+  });
 }
 
 export async function chat(request, env, tokens) {
