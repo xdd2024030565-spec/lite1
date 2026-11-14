@@ -35,10 +35,21 @@ const metadata = {
 };
 if (DS) metadata.bindings.push({ type: 'secret_text', name: 'DEEPSEEK_TOKENS', text: DS });
 
+// 收集 lib/ 与 sites/ 下的模块（Workers 上传时模块名要保留相对路径）
+const mods = [];
+for (const sub of ['lib', 'sites']) {
+  const dir = DIR + sub;
+  if (!fs.existsSync(dir)) continue;
+  for (const f of fs.readdirSync(dir)) {
+    if (f.slice(-3) === '.js') mods.push({ name: sub + '/' + f, body: fs.readFileSync(dir + '/' + f) });
+  }
+}
+
 const fd = new FormData();
 fd.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }), 'metadata.json');
 fd.append('deepseek-web.js', new Blob([js], { type: 'application/javascript+module' }), 'deepseek-web.js');
 fd.append('sha3_wasm_bg.wasm', new Blob([wasm], { type: 'application/wasm' }), 'sha3_wasm_bg.wasm');
+for (const m of mods) fd.append(m.name, new Blob([m.body], { type: 'application/javascript+module' }), m.name);
 
 // 强制给每个 part 加上 filename（Workers 上传接口依赖它）
 const parts = [];
@@ -58,7 +69,7 @@ const text = await res.text();
 let j = null; try { j = JSON.parse(text); } catch (e) {}
 if (res.ok && j && j.success) {
   console.log('✅ 部署成功  script=' + NAME + '  http=' + res.status);
-  console.log('   js=' + js.length + 'B  wasm=' + wasm.length + 'B  secret=' + (DS ? '已写入 DEEPSEEK_TOKENS' : '未写'));
+  console.log('   js=' + js.length + 'B  wasm=' + wasm.length + 'B  modules=' + mods.length + '  secret=' + (DS ? '已写入 DEEPSEEK_TOKENS' : '未写'));
 } else {
   console.log('❌ 部署失败 http=' + res.status);
   console.log(text.slice(0, 600));
