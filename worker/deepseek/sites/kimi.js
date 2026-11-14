@@ -29,6 +29,34 @@ export const models = [{ id: MODEL, name: 'Kimi' }];
 const TOKEN_CACHE = new Map();
 const TOKEN_TTL = 480000;
 
+/** 解开 JWT 的载荷段（只做 base64url 解码，不验签）。 */
+export function jwtPayload(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length < 2) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+    const bin = atob(b64 + pad);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 判断凭证类型：access 直接用，refresh 先换。
+ * 不是 JWT（比如手填的短串）一律按 refresh 处理。
+ */
+export function tokenKind(token) {
+  const payload = jwtPayload(token);
+  if (!payload) return 'refresh';
+  if (payload.typ === 'access') return 'access';
+  if (payload.typ === 'refresh') return 'refresh';
+  return 'refresh';
+}
+
 function mshHeaders() {
   return {
     'x-msh-platform': 'web',
@@ -233,13 +261,17 @@ export async function chat(request, env, tokens) {
     });
   }
   let access;
-  try {
-    access = await refreshToken(token);
-  } catch (e) {
-    return new Response(JSON.stringify({ error: { message: e.message } }), {
-      status: 502,
-      headers: { 'content-type': 'application/json' },
-    });
+  if (tokenKind(token) === 'access') {
+    access = token;
+  } else {
+    try {
+      access = await refreshToken(token);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: { message: e.message } }), {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
   }
   let upstream;
   try {

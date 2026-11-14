@@ -131,6 +131,33 @@ test('完整链路：换 token 后按帧读流，正文与结束都翻成 OpenAI
   }
 });
 
+test('access 类型的凭证直接用，不再换 token', async () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const accessToken = `${b64({ alg: 'HS512' })}.${b64({ typ: 'access', exp: 9999999999 })}.sig`;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const frame = encodeFrame({ block: { text: { content: '好' } } });
+    return new Response(frame, { status: 200, headers: { 'content-type': 'application/connect+json' } });
+  };
+  try {
+    const res = await chat(
+      new Request('https://x/kimi/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ messages: [{ role: 'user', content: '在吗' }] }),
+      }),
+      { KIMI_TOKENS: accessToken },
+      [accessToken],
+    );
+    const text = await res.text();
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].includes('ChatService/Chat'));
+    assert.ok(text.includes('"content":"好"'));
+  } finally {
+    delete globalThis.fetch;
+  }
+});
+
 test('聊天接口返回非 2xx 时给出可读错误', async () => {
   globalThis.fetch = async (url) => {
     if (String(url).includes('RefreshToken')) {
