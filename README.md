@@ -145,8 +145,9 @@ npx wrangler deploy
   Cookie 用 `sso`，上游逐行 JSON 的 `result.response.token` 翻成 `delta.content`
   （`isThinking` 走 `delta.reasoning_content`），`isFinal` 收尾；
   `x-statsig-id` 默认内置固定值，被拒时可用 secret `GROK_STATSIG_ID` 覆盖
-- Grok 凭证：Cloudflare 后台 Workers → deepseek-web → Settings → Variables and Secrets 添加 `GROK_TOKENS`
-  （CI 用的 token 没有 Workers secret 写权限，命令行 `wrangler secret put` 会报 7003）
+- Grok 凭证：写在 GitHub 仓库 secret `GROK_TOKENS`，部署流程在 `wrangler deploy` 时作为普通变量注入
+  （CI 那把 Cloudflare token 没有 Workers secret 写权限，`wrangler secret put` 会报 7003，
+  所以走「随部署上传变量」这条路；值不落仓库、日志按字段脱敏）
 - 聊天请求必须同时带 `modelName` 与 `modelMode`：模式由 `POST /rest/models` 按 token 读取并缓存 10 分钟，
   只发模型名会被上游回「This model is temporarily unavailable」
 - 健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
