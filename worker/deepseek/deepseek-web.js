@@ -570,9 +570,17 @@ function deepseekHealth(request, env) {
   const headerIsToken = !!hdr && (!pk || hdr !== pk);
   const dsOk = tk.length > 0 || headerIsToken;
   const doubaoOk = doubaoToken(env).length > 0;
+  const grokOk = grok.health(env).ok;
   if (!hdr) {
     return jsonResp(
-      { ok: dsOk, sites: { deepseek: dsOk ? 'ok' : 'no_token', doubao: doubaoOk ? 'ok' : 'no_token' } },
+      {
+        ok: dsOk,
+        sites: {
+          deepseek: dsOk ? 'ok' : 'no_token',
+          doubao: doubaoOk ? 'ok' : 'no_token',
+          grok: grokOk ? 'ok' : 'no_token',
+        },
+      },
       200, env, request
     );
   }
@@ -588,6 +596,7 @@ function deepseekHealth(request, env) {
       sites: {
         deepseek: { ok: dsOk, kind: dsOk ? 'ok' : 'no_token' },
         doubao: { ok: doubaoOk, kind: doubaoOk ? 'ok' : 'no_token' },
+        grok: { ok: grokOk, kind: grokOk ? 'ok' : 'no_token' },
       },
     },
     200, env, request
