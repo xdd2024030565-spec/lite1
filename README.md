@@ -166,5 +166,9 @@ npx wrangler deploy
 - 各站凭证都走同一条注入路径：部署时从仓库 secret 读 `GROK_TOKENS` / `GLM_TOKENS` / `KIMI_TOKENS`，
   写进临时 `wrangler.ci.toml` 的 `[vars]` 再上传；日志按字段脱敏
 - 健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
+- 取凭证可以不用手动开 F12：`node tools/pull-cookie.mjs <页面地址片段> <cookie名|ls:键> [输出文件]`
+  通过本机共享浏览器（`dsh-shared-browser`，CDP 默认 `127.0.0.1:9240`）读已登录页面里的 cookie 或 localStorage，
+  例如 `node tools/pull-cookie.mjs chatglm.cn chatglm_refresh_token /tmp/glm.txt`；
+  不给输出文件时只打印长度与前 8 位，适合核对键名是否存在
 - 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
   （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、鉴权与健康检查）
