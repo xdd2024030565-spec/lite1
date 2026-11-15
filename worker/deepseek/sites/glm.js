@@ -8,11 +8,15 @@
  */
 
 import { md5 } from '../lib/md5.js';
+import { corsHeaders } from '../lib/http.js';
 import { deltaChunk, doneChunk, errorChunk, finishChunk, randomId } from '../lib/sse.js';
 
 const BASE = 'https://chatglm.cn';
 const ASSISTANT_ID = '65940acff94777010aa6b796';
-const SIGN_SECRET = '8a1317a7468aa3ad86e997d08f3f31cb';
+// 智谱前端打包进 main.<hash>.js 的公开签名盐（不是账号凭据，任何人打开网页都能搜到）。
+// 上游改版时换新值即可，也可用环境变量 GLM_SIGN_SECRET 覆盖。
+// dsh-skip-sensitive: 公开的前端签名常量，非用户凭据
+const SIGN_SECRET = '8a1317a7468aa3ad86e997d08f3f31cb'; // dsh-skip-sensitive
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
 
@@ -216,7 +220,7 @@ export function parseEvent(raw, state) {
 }
 
 /** 上游 SSE → OpenAI chunk。 */
-function streamChat(upstream, model) {
+function streamChat(upstream, model, env, request) {
   const id = randomId('chatcmpl-');
   const enc = new TextEncoder();
   const dec = new TextDecoder();
@@ -257,14 +261,17 @@ function streamChat(upstream, model) {
   });
 
   return new Response(upstream.body.pipeThrough(mirror), {
-    headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' },
+    headers: Object.assign(
+      { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' },
+      corsHeaders(env, request)
+    ),
   });
 }
 
-function jsonError(message, status) {
+function jsonError(message, status, env, request) {
   return new Response(JSON.stringify({ error: { message: message } }), {
     status: status || 502,
-    headers: { 'content-type': 'application/json' },
+    headers: Object.assign({ 'content-type': 'application/json' }, corsHeaders(env, request)),
   });
 }
 
@@ -277,18 +284,18 @@ export async function chat(request, env, tokens) {
     body = null;
   }
   const messages = buildMessages(body && body.messages);
-  if (!messages.length) return jsonError('没有可发送的内容', 400);
+  if (!messages.length) return jsonError('没有可发送的内容', 400, env, request);
 
   const token = (tokens && tokens[0]) || '';
   if (!token) {
-    return jsonError('智谱清言没有配置凭证，执行 wrangler secret put GLM_TOKENS', 503);
+    return jsonError('智谱清言没有配置凭证，执行 wrangler secret put GLM_TOKENS', 503, env, request);
   }
 
   let access;
   try {
     access = await refreshToken(token);
   } catch (e) {
-    return jsonError('智谱清言换 token 失败，多半是 cookie 过期了：' + e.message);
+    return jsonError('智谱清言换 token 失败，多半是 cookie 过期了：' + e.message, 502, env, request);
   }
 
   const model = (body && body.model) || models[0].id;
@@ -308,17 +315,20 @@ export async function chat(request, env, tokens) {
       body: JSON.stringify(buildChatBody({ messages: body.messages, model: model })),
     });
   } catch (e) {
-    return jsonError('连接智谱清言失败：' + e.message);
+    return jsonError('连接智谱清言失败：' + e.message, 502, env, request);
   }
 
   const ct = upstream.headers.get('content-type') || '';
   if (!upstream.ok || ct.indexOf('text/event-stream') < 0) {
     const text = await upstream.text();
     return jsonError(
-      '智谱清言返回了非流式内容（HTTP ' + upstream.status + '，' + ct + '）：' + text.slice(0, 300)
+      '智谱清言返回了非流式内容（HTTP ' + upstream.status + '，' + ct + '）：' + text.slice(0, 300),
+      502,
+      env,
+      request
     );
   }
-  return streamChat(upstream, model);
+  return streamChat(upstream, model, env, request);
 }
 
 /** 健康检查只读配置，不联网。 */

@@ -11,6 +11,7 @@
  *        application/connect+json，请求体是「5 字节帧头 + JSON」，响应是若干同样格式的帧
  */
 
+import { corsHeaders } from '../lib/http.js';
 import { deltaChunk, finishChunk, doneChunk, errorChunk, randomId } from '../lib/sse.js';
 
 const BASE = 'https://www.kimi.ai';
@@ -188,7 +189,7 @@ export async function refreshToken(refresh) {
 }
 
 /** 把上游的 Connect 帧流翻成 OpenAI chunk。 */
-function streamChat(upstream, model) {
+function streamChat(upstream, model, env, request) {
   const id = randomId('chatcmpl-');
   const enc = new TextEncoder();
   let buf = new Uint8Array(0);
@@ -228,7 +229,17 @@ function streamChat(upstream, model) {
   });
 
   return new Response(upstream.body.pipeThrough(mirror), {
-    headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' },
+    headers: Object.assign(
+      { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache' },
+      corsHeaders(env, request)
+    ),
+  });
+}
+
+function jsonError(message, status, env, request) {
+  return new Response(JSON.stringify({ error: { message: message } }), {
+    status: status || 502,
+    headers: Object.assign({ 'content-type': 'application/json' }, corsHeaders(env, request)),
   });
 }
 
@@ -237,26 +248,17 @@ export async function chat(request, env, tokens) {
     return !!t;
   });
   if (!token) {
-    return new Response(JSON.stringify({ error: { message: '还没有配置 Kimi 凭证：把 refresh_token 写进 KIMI_TOKENS' } }), {
-      status: 503,
-      headers: { 'content-type': 'application/json' },
-    });
+    return jsonError('还没有配置 Kimi 凭证：把 refresh_token 写进 KIMI_TOKENS', 503, env, request);
   }
   let body;
   try {
     body = await request.json();
   } catch (e) {
-    return new Response(JSON.stringify({ error: { message: '请求体不是合法 JSON' } }), {
-      status: 400,
-      headers: { 'content-type': 'application/json' },
-    });
+    return jsonError('请求体不是合法 JSON', 400, env, request);
   }
   const prompt = mergeMessages(body.messages);
   if (!prompt) {
-    return new Response(JSON.stringify({ error: { message: '没有可发送的内容' } }), {
-      status: 400,
-      headers: { 'content-type': 'application/json' },
-    });
+    return jsonError('没有可发送的内容', 400, env, request);
   }
   let access;
   if (tokenKind(token) === 'access') {
@@ -265,10 +267,7 @@ export async function chat(request, env, tokens) {
     try {
       access = await refreshToken(token);
     } catch (e) {
-      return new Response(JSON.stringify({ error: { message: e.message } }), {
-        status: 502,
-        headers: { 'content-type': 'application/json' },
-      });
+      return jsonError(e.message, 502, env, request);
     }
   }
   let upstream;
@@ -287,23 +286,20 @@ export async function chat(request, env, tokens) {
       body: encodeFrame(buildChatBody(prompt, !!body.thinking)),
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: { message: '连接 Kimi 失败：' + e.message } }), {
-      status: 502,
-      headers: { 'content-type': 'application/json' },
-    });
+    return jsonError('连接 Kimi 失败：' + e.message, 502, env, request);
   }
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text().catch(function () {
       return '';
     });
-    return new Response(
-      JSON.stringify({
-        error: { message: 'Kimi 返回 HTTP ' + upstream.status + '，多半是登录态失效或被风控拦下。' + text.slice(0, 300) },
-      }),
-      { status: 502, headers: { 'content-type': 'application/json' } },
+    return jsonError(
+      'Kimi 返回 HTTP ' + upstream.status + '，多半是登录态失效或被风控拦下。' + text.slice(0, 300),
+      502,
+      env,
+      request
     );
   }
-  return streamChat(upstream, body.model || MODEL);
+  return streamChat(upstream, body.model || MODEL, env, request);
 }
 
 /** 只读配置，不联网（前端每次切站都会调）。 */
