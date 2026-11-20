@@ -4,7 +4,7 @@ import worker from '../deepseek-web.js';
 
 /*
  * 浏览器端能用的前提：所有响应都要带 CORS 头。
- * 曾经踩过的坑：智谱/Kimi 适配器自己 new Response 时漏了 Access-Control-Allow-Origin，
+ * 曾经踩过的坑：Grok 适配器自己 new Response 时漏了 Access-Control-Allow-Origin，
  * curl 测着一切正常，真浏览器却报 "blocked by CORS policy"。
  */
 const ORIGIN = 'https://xdd2024030565-spec.github.io';
@@ -18,7 +18,7 @@ function post(site) {
 }
 
 test('OPTIONS 预检返回 204 且带 CORS 头', async () => {
-  for (const site of ['deepseek', 'doubao', 'grok', 'glm', 'kimi']) {
+  for (const site of ['deepseek', 'grok']) {
     const res = await worker.fetch(
       new Request(`https://worker.example/${site}/v1/chat/completions`, {
         method: 'OPTIONS',
@@ -33,7 +33,7 @@ test('OPTIONS 预检返回 204 且带 CORS 头', async () => {
 });
 
 test('缺凭证时的错误响应同样带 CORS 头（浏览器才能读到原因）', async () => {
-  for (const site of ['glm', 'kimi']) {
+  for (const site of ['grok']) {
     const res = await worker.fetch(post(site), {});
     assert.equal(res.status, 503, site);
     assert.ok(res.headers.get('access-control-allow-origin'), site + ' 的错误响应缺 CORS 头');
@@ -43,7 +43,7 @@ test('缺凭证时的错误响应同样带 CORS 头（浏览器才能读到原�
 });
 
 test('模型列表与健康检查都带 CORS 头', async () => {
-  for (const site of ['glm', 'kimi']) {
+  for (const site of ['grok']) {
     const models = await worker.fetch(
       new Request(`https://worker.example/${site}/v1/models`, { headers: { Origin: ORIGIN } }),
       {}

@@ -8,12 +8,12 @@ test('站点前缀被拆出来', () => {
     path: '/v1/chat/completions',
     legacy: false,
   });
-  assert.deepEqual(route('/doubao/v1/models'), { site: 'doubao', path: '/v1/models', legacy: false });
+  assert.deepEqual(route('/grok/v1/models'), { site: 'grok', path: '/v1/models', legacy: false });
 });
 
 test('/<site> 与 /<site>/health 都是健康检查', () => {
-  assert.deepEqual(route('/doubao'), { site: 'doubao', path: '/health', legacy: false });
-  assert.deepEqual(route('/doubao/health'), { site: 'doubao', path: '/health', legacy: false });
+  assert.deepEqual(route('/grok'), { site: 'grok', path: '/health', legacy: false });
+  assert.deepEqual(route('/grok/health'), { site: 'grok', path: '/health', legacy: false });
   assert.deepEqual(route('/health'), { site: 'deepseek', path: '/health', legacy: true });
   assert.deepEqual(route('/'), { site: 'deepseek', path: '/health', legacy: true });
 });

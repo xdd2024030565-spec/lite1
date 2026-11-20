@@ -130,19 +130,12 @@ npx wrangler deploy
 | 路径 | 上游 | 说明 |
 |---|---|---|
 | `/deepseek/v1/*` | chat.deepseek.com | 与老路径完全等价 |
-| `/doubao/v1/*` | www.doubao.com | 豆包网页版（单轮拼多轮，流式翻译） |
 | `/grok/v1/*` | grok.com | Grok 网页版（NDJSON 逐行翻译成 OpenAI chunk，纯对话） |
-| `/glm/v1/*` | chatglm.cn | 智谱清言网页版（刷 token → 时间戳签名 → 全量快照转增量） |
-| `/kimi/v1/*` | www.kimi.ai | Kimi 网页版（Connect RPC 帧协议，access 直用或 refresh 换） |
 | `/v1/*`、`/chat/completions` | chat.deepseek.com | legacy，等价于 `/deepseek/v1/*` |
 | `/health` | — | 不带口令只回 `{ok, sites}`；带 `Authorization` 才回 token 数量等细节 |
 
 - 路由拆分在 `worker/deepseek/lib/route.js`，CORS/JSON 响应在 `lib/http.js`，
   OpenAI chunk 输出在 `lib/sse.js`，token 轮询在 `lib/pool.js`
-- 豆包适配器在 `worker/deepseek/sites/doubao.js`：请求 `POST /samantha/chat/completion`，
-  Cookie 用 `sessionid`，SSE 的 `event_type=2001` 翻成 `choices[0].delta.content`，
-  `2003` / `is_finish` 收尾；图片事件（`content_type=2074`）暂不渲染
-- 豆包凭证：`wrangler secret put DOUBAO_TOKENS`（多个用逗号分隔），或前端在设置里填 `sessionid`
 - Grok 适配器在 `worker/deepseek/sites/grok.js`：请求 `POST /rest/app-chat/conversations/new`，
   Cookie 用 `sso`，上游逐行 JSON 的 `result.response.token` 翻成 `delta.content`
   （`isThinking` 走 `delta.reasoning_content`），`isFinal` 收尾；
@@ -152,23 +145,8 @@ npx wrangler deploy
   所以走「随部署上传变量」这条路；值不落仓库、日志按字段脱敏）
 - 聊天请求必须同时带 `modelName` 与 `modelMode`：模式由 `POST /rest/models` 按 token 读取并缓存 10 分钟，
   只发模型名会被上游回「This model is temporarily unavailable」
-- 智谱清言适配器在 `worker/deepseek/sites/glm.js`：`POST /chatglm/user-api/user/refresh` 用
-  `chatglm_refresh_token` 换 access（缓存 1 小时），`POST /chatglm/backend-api/assistant/stream` 发消息；
-  每个请求要带 `X-Sign`/`X-Timestamp`/`X-Nonce`（时间戳倒数第二位写成校验位 + md5，实现在 `lib/md5.js`）；
-  上游每帧 `parts` 是全量快照，适配器按全文 diff 算增量再转 `delta.content`
-  （`type=think` 走 `delta.reasoning_content`），`status=finish` 收尾；凭证写进仓库 secret `GLM_TOKENS`
-- Kimi 适配器在 `worker/deepseek/sites/kimi.js`：上游已迁到 Connect RPC——
-  `POST https://auth.kimi.ai/api/account.gateway.v1.AuthService/RefreshToken` 换 access，
-  `POST https://www.kimi.ai/apiv2/kimi.gateway.chat.v1.ChatService/Chat` 发消息；
-  请求体是「1 字节标志位 + 4 字节大端长度 + JSON」的帧（`encodeFrame` / `takeFrames`），
-  `block.text.content` 翻成 `delta.content`、`block.think.content` 翻成 `delta.reasoning_content`、`done` 收尾；
-  `KIMI_TOKENS` 放 `kimi-refresh` cookie，或直接放 `typ=access` 的 JWT（15 分钟，适配器会自动识别直用）
-- 各站凭证都走同一条注入路径：部署时从仓库 secret 读 `GROK_TOKENS` / `GLM_TOKENS` / `KIMI_TOKENS`，
+- Grok 凭证走同一条注入路径：部署时从仓库 secret 读 `GROK_TOKENS`，
   写进临时 `wrangler.ci.toml` 的 `[vars]` 再上传；日志按字段脱敏
 - 健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
-- 取凭证可以不用手动开 F12：`node tools/pull-cookie.mjs <页面地址片段> <cookie名|ls:键> [输出文件]`
-  通过本机共享浏览器（`dsh-shared-browser`，CDP 默认 `127.0.0.1:9240`）读已登录页面里的 cookie 或 localStorage，
-  例如 `node tools/pull-cookie.mjs chatglm.cn chatglm_refresh_token /tmp/glm.txt`；
-  不给输出文件时只打印长度与前 8 位，适合核对键名是否存在
 - 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
   （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、鉴权与健康检查）
