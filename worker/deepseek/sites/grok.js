@@ -365,3 +365,20 @@ export function health(env) {
   const has = !!(env && env.GROK_TOKENS);
   return { ok: has, site: 'grok', kind: has ? 'ok' : 'no_token' };
 }
+
+/*
+ * 凭证解析：env 里的 GROK_TOKENS 优先，其次退回请求头里的 Bearer（前端设置里
+ * 填的 sso）。聊天与只读接口必须走同一套规则，否则会出现「能聊天、点网页版
+ * 对话却说没配凭证」。配了 PROXY_KEY 时不认请求头凭证，避免拿代理口令白嫖 token。
+ */
+export function tokensFrom(request, env) {
+  const raw = (env && env.GROK_TOKENS) || '';
+  const list = String(raw)
+    .split(',')
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) { return !!t; });
+  if (list.length) return list;
+  if (env && env.PROXY_KEY) return [];
+  const hdr = ((request && request.headers.get('Authorization')) || '').replace(/^Bearer\s+/i, '').trim();
+  return hdr ? [hdr] : [];
+}

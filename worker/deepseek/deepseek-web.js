@@ -20,6 +20,7 @@
 import { route } from './lib/route.js';
 import { jsonResp, corsHeaders } from './lib/http.js';
 import * as grok from './sites/grok.js';
+import * as grokRead from './sites/grok-sessions.js';
 import * as wasmNs from './sha3_wasm_bg.wasm';
 // Cloudflare CompiledWasm：命名空间里是 { default: WebAssembly.Module }
 // Node --experimental-wasm-modules：命名空间就是 wasm 的导出对象本身
@@ -699,7 +700,8 @@ function deepseekChat(request, env, clientKey, proxyKey) {
 async function handleGrok(request, env, path, url) {
   if (path === '/health') return jsonResp(grok.health(env), 200, env, request);
   if (path === '/v1/models' || path === '/models') {
-    const list = grokToken(env).length ? (await grok.listModels(grokToken(env)[0])).list : grok.models;
+    const tks = grok.tokensFrom(request, env);
+    const list = tks.length ? (await grok.listModels(tks[0])).list : grok.models;
     return jsonResp(
       {
         object: 'list',
@@ -710,15 +712,12 @@ async function handleGrok(request, env, path, url) {
       200, env, request
     );
   }
-  // Grok 网页版没有可绑定的历史会话接口，返回空列表让前端走本机对话
-  if (path === '/v1/sessions') return jsonResp({ object: 'list', data: [] }, 200, env, request);
-  if (path === '/v1/sessions/messages') return jsonResp({ id: '', count: 0, messages: [] }, 200, env, request);
+  // 网页版对话列表与历史：只读接口，凭证解析与聊天路径一致
+  if (path === '/v1/sessions') return grokRead.sessionsResponse(grok.tokensFrom(request, env), env, request, url);
+  if (path === '/v1/sessions/messages') return grokRead.messagesResponse(grok.tokensFrom(request, env), env, request, url);
 
   if (path === '/v1/chat/completions' || path === '/chat/completions') {
-    const hdr = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-    const pk = env && env.PROXY_KEY;
-    let tokens = grokToken(env);
-    if (!tokens.length && hdr && !pk) tokens = [hdr];
+    const tokens = grok.tokensFrom(request, env);
     if (!tokens.length) {
       return jsonResp(
         {
@@ -733,14 +732,6 @@ async function handleGrok(request, env, path, url) {
     return grok.chat(request, env, tokens, url);
   }
   return jsonResp({ error: { message: 'Not Found: ' + url.pathname, type: 'not_found' } }, 404, env, request);
-}
-
-function grokToken(env) {
-  const raw = (env && env.GROK_TOKENS) || '';
-  return String(raw)
-    .split(',')
-    .map(function (t) { return t.trim(); })
-    .filter(function (t) { return !!t; });
 }
 
 async function handleChat(request, env, tokens) {

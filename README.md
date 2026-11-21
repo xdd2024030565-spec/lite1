@@ -131,6 +131,8 @@ npx wrangler deploy
 |---|---|---|
 | `/deepseek/v1/*` | chat.deepseek.com | 与老路径完全等价 |
 | `/grok/v1/*` | grok.com | Grok 网页版（NDJSON 逐行翻译成 OpenAI chunk，纯对话） |
+| `/grok/v1/sessions` | grok.com | Grok 网页版对话列表（只读，`{object:'list',data:[…]}`） |
+| `/grok/v1/sessions/messages?id=&limit=` | grok.com | 单个对话最近 N 条消息（只读） |
 | `/v1/*`、`/chat/completions` | chat.deepseek.com | legacy，等价于 `/deepseek/v1/*` |
 | `/health` | — | 不带口令只回 `{ok, sites}`；带 `Authorization` 才回 token 数量等细节 |
 
@@ -140,6 +142,17 @@ npx wrangler deploy
   Cookie 用 `sso`，上游逐行 JSON 的 `result.response.token` 翻成 `delta.content`
   （`isThinking` 走 `delta.reasoning_content`），`isFinal` 收尾；
   `x-statsig-id` 默认内置固定值，被拒时可用 secret `GROK_STATSIG_ID` 覆盖
+- Grok 的只读接口在 `worker/deepseek/sites/grok-sessions.js`（与聊天分开，便于控制单文件长度）：
+  列表走 `GET /rest/app-chat/conversations?pageSize=&orderBy=LAST_UPDATE`；
+  历史分两步——先 `GET /rest/app-chat/conversations/{id}/response-node?includeThreads=true`
+  拿 `responseId`/`sender` 骨架定顺序，再 `POST /rest/app-chat/conversations/{id}/load-responses`
+  （body `{"responseIds":[…]}`，按 50 个一批分批请求）取正文；正文在 `message`，思考在
+  `thinking_trace` 或 `agent_thinking_traces[].thinking_trace`。上游不保证返回顺序，按骨架重排后再截取尾部
+- 读接口一律不重试：凭证失效（401/403）映射成 401，其余上游失败返回 502 让前端显示「读取失败 + 重试」
+  ——不把失败伪装成空列表，否则用户分不清「真没有历史」和「额度用完/被风控」。
+  Grok 没有服务端 `limit` 参数，只用「少要几条」控制成本
+- 读接口与聊天共用同一套凭证与指纹头：`GROK_TOKENS` 优先，退回请求头里的 Bearer（设置里填的 sso），
+  `x-statsig-id` 认 secret `GROK_STATSIG_ID`
 - Grok 凭证：写在 GitHub 仓库 secret `GROK_TOKENS`，部署流程在 `wrangler deploy` 时作为普通变量注入
   （CI 那把 Cloudflare token 没有 Workers secret 写权限，`wrangler secret put` 会报 7003，
   所以走「随部署上传变量」这条路；值不落仓库、日志按字段脱敏）
@@ -149,4 +162,4 @@ npx wrangler deploy
   写进临时 `wrangler.ci.toml` 的 `[vars]` 再上传；日志按字段脱敏
 - 健康检查只读配置、不打上游，避免消息配额被探测请求吃掉
 - 单元测试：`cd worker/deepseek && node --test tests/*.test.mjs`
-  （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、鉴权与健康检查）
+  （覆盖路由拆分、事件翻译、请求体字段、上游非流式兜底、Grok 只读接口的列表归一化与两步取数、鉴权与健康检查）
