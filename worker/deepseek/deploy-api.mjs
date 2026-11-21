@@ -28,7 +28,7 @@ const metadata = {
   main_module: 'deepseek-web.js',
   compatibility_date: '2024-11-01',
   bindings: [
-    { type: 'plain_text', name: 'ALLOW_ORIGIN', text: 'https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io,https://lite-3d8c30u.maozi.io' },
+    { type: 'plain_text', name: 'ALLOW_ORIGIN', text: 'https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io,https://lite-3d8c30u.maozi.io,https://webchat-10i3d8c30u.maozi.io' },
     { type: 'plain_text', name: 'THINKING', text: 'auto' },
     { type: 'plain_text', name: 'SEARCH', text: 'auto' },
   ],

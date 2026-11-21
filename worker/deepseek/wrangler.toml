@@ -17,7 +17,7 @@ fallthrough = true
 
 [vars]
 # 允许跨域的前端来源（英文逗号分隔；* 表示任意站点，不推荐）
-ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io,https://lite-3d8c30u.maozi.io"
+ALLOW_ORIGIN = "https://nav.yongjiu.ccwu.cc,https://lite1-3d8c30u.maozi.io,https://xdd2024030565-spec.github.io,https://lite-3d8c30u.maozi.io,https://webchat-10i3d8c30u.maozi.io"
 # 深度思考开关：auto（按 model 名判断）/ enabled / disabled
 THINKING = "auto"
 # 联网搜索开关：auto / enabled / disabled
